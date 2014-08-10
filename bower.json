@@ -1,0 +1,9 @@
+{
+  "name": "rgs",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "angular": "1.3.0-beta.17",
+    "angular-route": "1.3.0-beta.17"
+  }
+}
