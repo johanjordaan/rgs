@@ -103,15 +103,13 @@ apply_move = (game_state, move) ->
 # the players will be allocated to the roles in the game state
 # Players : [ of match keys]
 #
-initial_game_state = (match_keys) ->
+initial_game_state = (number_of_players) ->
   roles = ['X','O']
-  role_map = match_keys |> utils.shuffle |> _.zip roles |> _.pairs-to-obj
   active_role = roles[0]
 
   game_state =
     board: initial_board!
     roles: roles
-    role_map: role_map
     active_role: active_role
     result:
       finished: false

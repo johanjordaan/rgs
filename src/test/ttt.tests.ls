@@ -6,7 +6,9 @@ request = require 'supertest'
 
 rnd = require 'lcg-rnd'
 
-ttt = require '../dist/ttt'
+app = require '../api_server'
+
+ttt = require '../ttt'
 
 describe 'Tick-Tac-Toe', (done) ->
 #  describe 'get_valid_moves', (done) ->
@@ -31,8 +33,7 @@ describe 'Tick-Tac-Toe', (done) ->
 
   describe 'a simple random game', (done) ->
     it 'should play a simple random game in 9 or less moves', (done) ->
-      match_keys = ['a','b']
-      game_state = ttt.initial_game_state match_keys
+      game_state = ttt.initial_game_state 2
 
       count = 0
       while not game_state.result.finished
@@ -40,45 +41,44 @@ describe 'Tick-Tac-Toe', (done) ->
         move_index = rnd.rnd_int_between 0 moves[game_state.active_role].length-1
         game_state = ttt.next_game_state game_state, game_state.active_role, move_index
         count = count + 1
-        console.log game_state.board
+        #console.log game_state.board
+
+      console.log game_state.result
 
       done()
 
+  describe 'a call to the server', (done) ->
+    var agent
 
+    before (done) ->
+      mongo = require 'mongoskin'
+      db_name = "mongodb://localhost/rgs_test"
+      db = mongo.db db_name, {native_parser:true}
+      agent := request app(db)
+      done()
 
+    describe 'some scenarios', (done) ->
+      it 'should return a list of games', (done) ->
+        agent.get '/api/v1/games'
+        .expect 200
+        .end (err,res) ->
+          res.body.length.should.equal 2
+          res.body[0].game_id.should.equal "ttt"
+          done()
 
-#  describe 'valid_moves', (done) ->
-#    it 'should generate valid moves for the given player and board state', (done) ->
-#      ttt.make_move game_state, move
-#      done()
+      it 'should return a list of matches', (done) ->
+        agent.get '/api/v1/games/ttt/matches'
+        .expect 200
+        .end (err,res) ->
+          res.body.length.should.equal 1
+          match_id = res.body[0].match_id
+          console.log match_id
 
-
-
-#describe 'Connectors', ->
-#  app = {}
-#
-#  before (done) ->
-#    app_setup true,(local_app) ->
-#      app = local_app
-#      done()
-#
-#  describe 'create', ->
-#    it "???????", (done) ->
-#
-#      request(app)
-#        .post("/status")
-#        .send( {} )
-#        .expect(404, { }, done )
-#
-#  describe 'create', ->
-#    it "should return a 400 error if there is no type specified", (done) ->
-#
-#      request(app)
-#        .get("/status")
-#        .send( {} )
-#        .expect(200)
-#        .expect (res) ->
-#          res.text.status.should.equal "OK"
-#
-#        .end (err,res) ->
-#          done()
+          agent.post "/api/v1/games/ttt/matches/#{match_id}/players"
+          .send do
+            name:'johan'
+          .expect 200
+          .end (err,res) ->
+            match_key = res.body
+            console.log match_key
+            done()

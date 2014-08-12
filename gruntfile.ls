@@ -10,40 +10,29 @@ module.exports = (grunt) ->
         src: 'src/<%= pkg.name %>.js'
         dest: 'build/<%= pkg.name %>.min.js'
 
-    livescript:
-      adminServer:
-        files:
-           'dist/admin_server.js': 'src/admin_server.ls'
-           'dist/utils.js': 'src/utils.ls'
-           'dist/ttt.js': 'src/ttt.ls'
-
-      apiServer:
-        files:
-           'dist/api_server.js': 'src/api_server.ls'
-           'dist/ttt.js': 'src/ttt.ls'
-      client:
-        files:
-           'dist/client/client.js': 'client/src/*.ls'
-      tests:
-        files:
-          'test/ttt.tests.js': 'src/test/ttt.tests.ls'
-
-
+    deadscript:
+      build:
+        expand: true,
+        cwd: './src',
+        src: ['**/*.ls'],
+        dest: './dist',
+        ext: '.js'
+        extDot : 'last'
 
     watch:
       serverSourceChanges:
         files:
            'src/*.ls'
-        tasks: ['livescript' 'mochaTest']
+        tasks: ['deadscript' 'mochaTest']
       frontEndChanges:
         files:
            'client/src/*.ls'
            'client/*.html'
-        tasks: ['livescript:client' 'copy:frontEndStatic' 'mochaTest']
+        tasks: ['deadscript' 'copy:frontEndStatic' 'mochaTest']
       testChanges:
         files:
            'src/test/*.ls'
-        tasks: ['livescript:tests' 'mochaTest']
+        tasks: ['deadscript' 'mochaTest']
 
 
     concurrent:
@@ -63,8 +52,6 @@ module.exports = (grunt) ->
         tasks: ['watch:frontEndChanges' 'watch:serverSourceChanges' 'watch:testChanges' ]
         options:
            logConcurrentOutput: true
-
-
 
     nodemon:
       adminServer:
@@ -113,11 +100,10 @@ module.exports = (grunt) ->
       test:
         options:
           reporter: 'dot'
-        src: ['test/**/*.js']
+        src: ['dist/test/**/*.js']
 
 
   grunt.loadNpmTasks 'grunt-contrib-uglify'
-  grunt.loadNpmTasks 'grunt-livescript'
   grunt.loadNpmTasks 'grunt-contrib-watch'
   grunt.loadNpmTasks 'grunt-concurrent'
   grunt.loadNpmTasks 'grunt-nodemon'
@@ -125,9 +111,11 @@ module.exports = (grunt) ->
   grunt.loadNpmTasks 'grunt-bowercopy'
   grunt.loadNpmTasks 'grunt-forever'
   grunt.loadNpmTasks 'grunt-mocha-test'
+  grunt.loadNpmTasks 'grunt-deadscript'
+
 
   grunt.registerTask 'devmon',  ['concurrent:apiAndAdmin']
   grunt.registerTask 'apimon',  ['concurrent:api']
   grunt.registerTask 'adminmon',['concurrent:admin']
   grunt.registerTask 'test',    ['concurrent:tests']
-  grunt.registerTask 'default', ['livescript' 'copy:frontEndStatic' 'bowercopy']
+  grunt.registerTask 'default', ['deadscript' 'copy:frontEndStatic' 'bowercopy']
