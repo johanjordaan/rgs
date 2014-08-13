@@ -4,6 +4,8 @@ should = require('chai').should()
 expect = require('chai').expect
 request = require 'supertest'
 
+async = require 'async'
+
 rnd = require 'lcg-rnd'
 
 app = require '../api_server'
@@ -43,7 +45,7 @@ describe 'Tick-Tac-Toe', (done) ->
         count = count + 1
         #console.log game_state.board
 
-      console.log game_state.result
+      #console.log game_state.result
 
       done()
 
@@ -54,6 +56,7 @@ describe 'Tick-Tac-Toe', (done) ->
       mongo = require 'mongoskin'
       db_name = "mongodb://localhost/rgs_test"
       db = mongo.db db_name, {native_parser:true}
+      db.dropDatabase()
       agent := request app(db)
       done()
 
@@ -72,13 +75,34 @@ describe 'Tick-Tac-Toe', (done) ->
         .end (err,res) ->
           res.body.length.should.equal 1
           match_id = res.body[0].match_id
-          console.log match_id
 
-          agent.post "/api/v1/games/ttt/matches/#{match_id}/players"
-          .send do
-            name:'johan'
-          .expect 200
-          .end (err,res) ->
-            match_key = res.body
-            console.log match_key
+          async.parallel [
+            (cb) ->
+              agent.post "/api/v1/games/ttt/matches/#{match_id}/players"
+              .send do
+                name:'johan'
+              .expect 200
+              .end (err,res) ->
+                match_key = res.body
+                cb null,match_key
+            ,(cb) ->
+              agent.post "/api/v1/games/ttt/matches/#{match_id}/players"
+              .send do
+                name:'joe'
+              .expect 200
+              .end (err,res) ->
+                match_key = res.body
+                cb null,match_key
+            ,(cb) ->
+              agent.post "/api/v1/games/ttt/matches/#{match_id}/players"
+              .send do
+                name:'sandy'
+              .expect 200
+              .end (err,res) ->
+                match_key = res.body
+                cb null,match_key
+          ], (err,results) ->
+            console.log results
             done()
+
+          false

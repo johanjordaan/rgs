@@ -150,7 +150,6 @@ app.post '/api/v1/games/:game_id/matches/:match_id/players', (req, res) ->
     | amatch.players.length < amatch.required_players =>
       # Add the player to the list and start the match if there is enough players
       #
-      amatch.players.push player
       switch amatch.players.length == amatch.required_players
       | true =>
         # Start a new match
@@ -163,14 +162,19 @@ app.post '/api/v1/games/:game_id/matches/:match_id/players', (req, res) ->
 
       # Save the match and the initial state
       #
-      db.matches.save amatch, (err,saved_match) ->
+      db.matches.findAndModify {_id : amatch._id},[] ,{ '$push' : { players:player }}, {new:true}, (err,saved_match) ->
         | err? => res.status(400).send err
-        | amatch.players.length < amatch.required_players =>
+        | saved_match.players.length < amatch.required_players =>
+          res.status(200).send { match_key: player.match_key }
+        | saved_match.players.length > amatch.required_players =>
+          res.status(200).send { status: "Match full" }
         | otherwise =>
           # Save the initial state
           #
-          amatch.initial_state.state_number = 0
-          db.match_states.save amatch.initial_state, (err,saved_state) ->
+          saved_match.initial_state = games[game_id].module.initial_game_state 2
+          saved_match.role_map = [p.match_key for p in saved_match.players] |> utils.shuffle |> _.zip saved_match.initial_state.roles |> _.pairs-to-obj
+          saved_match.initial_state.state_number = 0
+          db.match_states.save saved_match.initial_state, (err,saved_state) ->
             | err? => res.status(400).send err
             | otherwise => res.status(200).send { match_key: player.match_key }
 
