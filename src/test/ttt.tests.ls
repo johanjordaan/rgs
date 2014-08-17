@@ -11,98 +11,72 @@ rnd = require 'lcg-rnd'
 app = require '../api_server'
 
 ttt = require '../ttt'
+utils = require '../utils'
 
 describe 'Tick-Tac-Toe', (done) ->
-#  describe 'get_valid_moves', (done) ->
-#    it 'should return the valid moves for the game state', (done) ->
-#      game_state = ttt.initial_game_state ['111','222']
-#      moves = ttt.get_valid_moves game_state
-#
-#      moves.X.length.should.equal 9
-#      moves.O.length.should.equal 0
-#
-#      done()
 
+  describe 'initial_game_state', (done) ->
+    game_state = ttt.initial_game_state!
 
-#  describe 'make_move', (done) ->
-#    it 'should apply the selected move', (done) ->
-      #game_state = ttt.create_game_state!
-      #moves = ttt.get_valid_moves game_state
+    it 'should return an initial state object that has all the relevant fields defined', (done) ->
+      expect(game_state).to.exist
+      expect(game_state.roles).to.exist
+      expect(game_state.finished).to.exist
+      expect(game_state.valid_moves).to.exist
+      expect(game_state.results).to.exist
+      expect(game_state._private).to.exist
+      done!
 
-      #next_game_state = ttt.make_move game_state,'X',4
+    it 'should return an initial state with the X and O roles', (done) ->
+      game_state.roles.length.should.equal 2
+      game_state.roles.should.contain 'X'
+      game_state.roles.should.contain 'O'
+      done!
 
-#      done()
+    it 'should return an initial state which is not finished', (done) ->
+      game_state.finished.should.equal false
+      done!
 
-  describe 'a simple random game', (done) ->
-    it 'should play a simple random game in 9 or less moves', (done) ->
-      game_state = ttt.initial_game_state 2
+    it 'should return an initial state with 9 moves for X and 0 for O' (done) ->
+      game_state.valid_moves.X.length.should.equal 9
+      game_state.valid_moves.O.length.should.equal 1
+      done!
 
-      count = 0
-      while not game_state.result.finished
-        moves = ttt.get_valid_moves game_state
-        move_index = rnd.rnd_int_between 0 moves[game_state.active_role].length-1
-        game_state = ttt.next_game_state game_state, game_state.active_role, move_index
-        count = count + 1
-        #console.log game_state.board
+    it 'should return an initial state with an empty board', (done) ->
+      expect(game_state._private.board).to.exist
+      game_state._private.board.length.should.equal 3
+      for row to 2
+        game_state._private.board[row].length.should.equal 3
+        for col to 2
+          game_state._private.board[row][col].should.equal 0
+      done!
 
-      #console.log game_state.result
+    it 'should return an initial state with X as the active role', (done) ->
+      expect(game_state._private.active_role).to.exist
+      game_state._private.active_role.should.equal 'X'
+      done!
 
-      done()
+  describe 'next_game_state', (done) ->
+    game_state = ttt.initial_game_state!
+    next_game_state = ttt.next_game_state game_state, { 'X':[0],'O':[0] }
 
-  describe 'a call to the server', (done) ->
-    var agent
+    it 'should return the next game state', (done) ->
+      next_game_state.finished.should.equal false
+      next_game_state.valid_moves.X.length.should.equal 1
+      next_game_state.valid_moves.O.length.should.equal 8
+      done!
 
-    before (done) ->
-      mongo = require 'mongoskin'
-      db_name = "mongodb://localhost/rgs_test"
-      db = mongo.db db_name, {native_parser:true}
-      db.dropDatabase()
-      agent := request app(db)
-      done()
+    it 'should finish the game in between 5 and 9 moves(inclusive)', (done) ->
+      next_game_state := ttt.next_game_state next_game_state, { 'X':[0],'O':[0] }
+      count = 2
+      while !next_game_state.finished and count<11
+        next_game_state := ttt.next_game_state next_game_state, { 'X':[0],'O':[0] }
+        count := count + 1
 
-    describe 'some scenarios', (done) ->
-      it 'should return a list of games', (done) ->
-        agent.get '/api/v1/games'
-        .expect 200
-        .end (err,res) ->
-          res.body.length.should.equal 2
-          res.body[0].game_id.should.equal "ttt"
-          done()
-
-      it 'should return a list of matches', (done) ->
-        agent.get '/api/v1/games/ttt/matches'
-        .expect 200
-        .end (err,res) ->
-          res.body.length.should.equal 1
-          match_id = res.body[0].match_id
-
-          async.parallel [
-            (cb) ->
-              agent.post "/api/v1/games/ttt/matches/#{match_id}/players"
-              .send do
-                name:'johan'
-              .expect 200
-              .end (err,res) ->
-                match_key = res.body
-                cb null,match_key
-            ,(cb) ->
-              agent.post "/api/v1/games/ttt/matches/#{match_id}/players"
-              .send do
-                name:'joe'
-              .expect 200
-              .end (err,res) ->
-                match_key = res.body
-                cb null,match_key
-            ,(cb) ->
-              agent.post "/api/v1/games/ttt/matches/#{match_id}/players"
-              .send do
-                name:'sandy'
-              .expect 200
-              .end (err,res) ->
-                match_key = res.body
-                cb null,match_key
-          ], (err,results) ->
-            console.log results
-            done()
-
-          false
+      next_game_state.finished.should.equal true
+      count.should.be.at.least 5
+      count.should.be.at.most 9
+      next_game_state.results.X.should.equal 3
+      next_game_state.results.O.should.equal 0
+      done!
+      

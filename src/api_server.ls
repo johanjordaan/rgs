@@ -55,25 +55,6 @@ games_list = games |> _.values |> _.map (game) -> { game_id: game.game_id, descr
 ######## General methods
 utils = require './utils'
 
-create_match = (game_id) ->
-  deferred = Q.defer()
-
-  options = games[game_id].options
-  new_match =
-    match_id: utils.generate_token {}
-    game_id: options.game_id
-    required_players: options.required_players
-    status: "open"
-    players: []
-    moves: []      # List of {role,move_index,state_id}
-    current_state: {}
-
-  db.matches.save new_match, (err,saved_match) ->
-    | err? => deferred.reject err
-    | otherwise => deferred.resolve saved_match
-
-  deferred.promise
-
 # Removes the player key from the player list
 sanitize_players = (player_list) ->
   player_list |> _.map (player) -> delete player.player_key
@@ -81,121 +62,178 @@ sanitize_players = (player_list) ->
 ######## Rest Interface
 
 # Get a list of games
+#
 app.get '/api/v1/games', (req, res) ->
-  res.status(200).send games_list
+  res.status(200).send do
+    status: 'OK'
+    games: games_list
 
 # Get a list of matches
 # Request parameter filters : game_status
-# If no open matches exist then a new open one is created
-app.get '/api/v1/games/:game_id/matches', (req, res) ->
+#
+#
+app.get '/api/v1/matches', (req, res) ->
   game_id = req.param 'game_id'
-  db.matches.find( { game_id: game_id } ).toArray (err, matches) ->
-    | err? => res.status(200).send err
-    | otherwise =>
-      open_matches = matches |> _.filter (m) -> m.status == "open"
 
-      if open_matches.length <= 0
-        create_match(game_id).then (new_match) ->
-          matches.push new_match
-          res.status(200).send matches
-        , (err) ->
-          res.status(200).send err
-      else
-        res.status(200).send matches
+  # TODO : The matches needs to be sanatised
+  # TODO : Remove state info etc so sanatisation might not be required
+  # Just do it via find field filter
+  #
+  db.matches.find( { game_id: game_id } ).toArray (err, matches) ->
+    | err? => res.status(400).send err
+    | otherwise => res.status(200).send do
+      status: 'OK'
+      matches: matches
+
+# Creates a new match
+# The game_id should be one of the game_id's in the list of games
+#
+app.post '/api/v1/matches', (req, res) ->
+  game_id = req.body.game_id
+  game = games[game_id]
+
+  switch game?
+    | false =>
+      res.status(200).send do
+        status: 'ERROR'
+        message: "#{game_id} does not exist"
+    | otherwise =>
+      options = game.options
+      new_match =
+        match_id: utils.generate_token {}
+        game_id: options.game_id
+        status: "open"
+        required_players: options.required_players
+        player_count : 0
+        players: []
+        current_state: {}
+        role_map: {}
+        submitted_moves: {}
+        submitted_moves_count: 0
+
+      db.matches.save new_match, (err,saved_match) ->
+        | err? => res.status(400).send err
+        | otherwise => res.status(200).send do
+          status: 'OK'
+          match: saved_match
 
 # get the match details
-app.get '/api/v1/games/:game_id/matches/:match_id', (req, res) ->
-  game_id = req.param 'game_id'
+# Request parameter : match_key - if not presented then only public data is returned,
+# these restrictions only hold if a game is in progress. Afterwards
+#
+app.get '/api/v1/matches/:match_id', (req, res) ->
   match_id = req.param 'match_id'
 
   #todo : players and other stuff like moves etc needs to be sanaitised
   # this is to prevent private game data from being leaked
   #
   db.matches.findOne { match_id: match_id }, (err, amatch) ->
-    | err? => res.status(200).send err
-    | otherwise => res.status(200).send amatch
+    | err? => res.status(400).send err
+    | otherwise => res.status(200).send do
+      status: 'OK'
+      match: amatch
 
 
 # Get the states in the match
 # Inside the game the concept of a game might exist but it is not nescesary corelated turj in this
 # context
 # Request parameter filters : current_turn=true
-# Request parameter : match_key - if not presented then only public data is returned,
-# these restrictions only hold if a game is in progress. Afterwards
-app.get '/api/v1/games/:game_id/matches/:match_id/states', (req, res) ->
-  game_id = req.param 'game_id'
-  match_id = req.param 'match_id'
-  match_key = req.param 'match_key'
-
-
-  db.match_states.find({ match_id: match_id }).sort({state_number:1}).toArray (err, match_states) ->
-    | err? => res.status(200).send err
-    | otherwise =>
-      res.status(200).send match_states
+#app.get '/api/v1/matches/:match_id/states', (req, res) ->
+#  game_id = req.param 'game_id'
+#  match_id = req.param 'match_id'
+#  match_key = req.param 'match_key'
+#
+#  db.match_states.find({ match_id: match_id }).sort({state_number:1}).toArray (err, match_states) ->
+#    | err? => res.status(400).send err
+#    | otherwise => res.status(200).send match_states
 
 
 # Add a player to the match (join the match)
 # User has to post a structure with { player_key: player_name }
 # Player is returned a player_match_key, this has to be presented to make a
 # move or to get player specic data on turns
-app.post '/api/v1/games/:game_id/matches/:match_id/players', (req, res) ->
-  game_id = req.param 'game_id'
+app.post '/api/v1/matches/:match_id/players', (req, res) ->
   match_id = req.param 'match_id'
   player = req.body
 
   player.match_key = utils.generate_token {}
-
-  db.matches.findOne { match_id: match_id }, (err, amatch) ->
+  db.matches.findAndModify { match_id: match_id , '$where':'this.player_count<this.required_players' },[] ,{ '$push' : { players:player }, '$inc' : { player_count:1}  }, {new:true}, (err,saved_match) ->
     | err? => res.status(400).send err
-    | amatch.players.length < amatch.required_players =>
-      # Add the player to the list and start the match if there is enough players
-      #
-      switch amatch.players.length == amatch.required_players
-      | true =>
-        # Start a new match
-        #
-        amatch.initial_state = games[game_id].module.initial_game_state 2
-        amatch.role_map = [p.match_key for p in amatch.players] |> utils.shuffle |> _.zip amatch.initial_state.roles |> _.pairs-to-obj
-      | otherwise =>
-        # Just update the player list
-        #
+    | !saved_match?
+      res.status(200).send do
+        status: 'ERROR'
+        message: 'Match full'
 
-      # Save the match and the initial state
+    | saved_match.players.length < saved_match.required_players =>
+      # The match is still open but now with one less spot
       #
-      db.matches.findAndModify {_id : amatch._id},[] ,{ '$push' : { players:player }}, {new:true}, (err,saved_match) ->
+      res.status(200).send do
+        status: 'OK'
+        match_key: player.match_key
+    | otherwise =>
+      # The match is now full. Create the initail state and allocat players to roles
+      #
+      saved_match.current_state = games[saved_match.game_id].module.initial_game_state 2
+      saved_match.role_map = [p.match_key for p in saved_match.players]
+        |> utils.shuffle
+        |> _.zip saved_match.current_state.roles
+        |> _.map (item) -> [ item[1], item[0] ]
+        |> _.pairs-to-obj
+      saved_match.status = "inprogress"
+      db.matches.save saved_match, (err,write_status) ->
         | err? => res.status(400).send err
-        | saved_match.players.length < amatch.required_players =>
-          res.status(200).send { match_key: player.match_key }
-        | saved_match.players.length > amatch.required_players =>
-          res.status(200).send { status: "Match full" }
         | otherwise =>
-          # Save the initial state
-          #
-          saved_match.initial_state = games[game_id].module.initial_game_state 2
-          saved_match.role_map = [p.match_key for p in saved_match.players] |> utils.shuffle |> _.zip saved_match.initial_state.roles |> _.pairs-to-obj
-          saved_match.initial_state.state_number = 0
-          db.match_states.save saved_match.initial_state, (err,saved_state) ->
+          db.match_states.save saved_match.current_state, (err,saved_state) ->
             | err? => res.status(400).send err
-            | otherwise => res.status(200).send { match_key: player.match_key }
-
-    | otherwise => res.status(200).send { status: "Match full"}
-
-
+            | otherwise => res.status(200).send do
+              status: 'OK'
+              match_key: player.match_key
 
 
 # Update the match with a move. The move is the index of the last state in the
 # game.
-# Match key neesd to be present in order to make a valid move
+# Match key needs to be present in order to make a valid move
 # The player with the correct match_key has to be tha active player
 # and the move has to be a valid move. Here valid is defined as within the list of moves
-# In order to handle simultanious moves all playes has yo submit a move,it should be the
-# nop move if there is not moves for you for this tuen. This also measn that all players
+# In order to handle simultanious moves all playes has to submit a move,it should be the
+# nop move if there is not moves for you for this tuen. This also means that all players
 # will get al least the nop move.
 #
-app.put '/api/v1/games/:game_id/matches/:match_id/', (req, res) ->
-  game_id = req.param 'game_id'
+# If a player has already submitted a move then allow them to update their move
+# If they submit an invalid move then return an error.
+#
+app.post '/api/v1/matches/:match_id/moves', (req, res) ->
   match_id = req.param 'match_id'
-  turn_id = req.param 'turn_id'
   match_key = req.param 'match_key'
 
-  res.send 200, {}
+
+  # Move needs to contain the state_number and the move index
+  move  = req.body
+
+  db.matches.findAndModify { match_id: match_id , 'current_state.state_number':move.state_number }
+  ,[]
+  ,{ '$set' : { players:player }, '$inc' : { player_count:1}  }
+  , {new:true}, (err,saved_match) ->
+
+  db.matches.findOne { match_id: match_id }, (err, amatch) ->
+    | err? => res.status(400).send err
+    | !amatch? => res.status(200).send do
+      status: 'ERROR'
+      message: 'Match not found'
+    | amatch.status != 'inprogress' => res.status(200).send do
+      status: 'ERROR'
+      message: 'Math not in progress'
+    | otherwise =>
+      role = amatch.role_map[match_key]
+      switch role
+      | !role? => res.status(200).send do
+        status: 'ERROR'
+        message: 'match_key not valid for this match'
+      | otherwise =>
+        amatch.submitted_moves[role] = move.move_index
+        db.matches.save
+
+
+      res.status(200).send do
+        status: 'OK'
+        match: amatch

@@ -18,39 +18,41 @@ copy_board = (source_board) ->
   new_board
 
 copy_game_state = (source_game_state)->
-  # Stuff that needs to be copied between game states
-  #
   new_game_state =
-    board: copy_board source_game_state.board
-    result:
-      finished: source_game_state.result.finished
-      scores:
-        X: source_game_state.result.scores.X
-        O: source_game_state.result.scores.O
-
-  # Stuff thats ok to reference.(ie does not need to be copied)
-  #
-  new_game_state.roles = source_game_state.roles
-  new_game_state.role_map =  source_game_state.role_map
-  new_game_state.active_role = source_game_state.active_role
+    roles: source_game_state.roles
+    finished: source_game_state.finished
+    valid_moves: get_valid_moves source_game_state
+    state_number: source_game_state.state_number
+    results:
+      X: source_game_state.results.X
+      O: source_game_state.results.O
+    _private:
+      board: copy_board source_game_state._private.board
+      active_role: source_game_state._private.active_role
 
   new_game_state
 
 # Returns a structure with the valid moves for each role
 # { role:[moves ...], ...  }
 get_valid_moves = (game_state) ->
+  # Initialise the moves to NOP(ie do nothing), in the case of ttt it would be invalid to
+  # be active and not make a move so this will be remomved later
+  #
   moves_for_role =
-    X: []
-    O: []
+    X: [{nop:true}]
+    O: [{nop:true}]
 
+  moves_for_role[game_state._private.active_role] = []
   for row to 2
     for col to 2
-      switch game_state.board[row][col]
-      | 0 => moves_for_role[game_state.active_role].push do
-        row:row
-        col:col
-        description:"#{game_state.active_role} to row #{row} col #{col}"
+      switch game_state._private.board[row][col]
+      | 0 => moves_for_role[game_state._private.active_role].push do
+          row:row
+          col:col
+          description:"#{game_state.active_role} to row #{row} col #{col}"
       | otherwise =>
+
+
 
   moves_for_role
 
@@ -58,64 +60,50 @@ get_valid_moves = (game_state) ->
 #
 calculate_results = (game_state) ->
   winner = 0
+  board = game_state._private.board
   for i to 2
-    if game_state.board[i][0] == game_state.board[i][1] == game_state.board[i][2]
-      winner = game_state.board[i][0]
-    if game_state.board[0][i] == game_state.board[1][i] == game_state.board[2][i]
-      winner = game_state.board[0][i]
+    if board[i][0] == board[i][1] == board[i][2]
+      winner = board[i][0]
+    if board[0][i] == board[1][i] == board[2][i]
+      winner = board[0][i]
 
-  if game_state.board[0][0] == game_state.board[1][1] == game_state.board[2][2]
-    winner = game_state.board[0][0]
-  if game_state.board[0][2] == game_state.board[1][1] == game_state.board[2][0]
-    winner = game_state.board[0][2]
+  if board[0][0] == board[1][1] == board[2][2]
+    winner = board[0][0]
+  if board[0][2] == board[1][1] == board[2][0]
+    winner = board[0][2]
 
   switch winner
   | 0 =>
-    switch (game_state.board |> _.flatten |> _.any (item) -> item == 0)
-    | true => game_state.result.finished = false
+    switch (board |> _.flatten |> _.any (item) -> item == 0)
+    | true => game_state.finished = false
     | otherwise =>
-      game_state.result.finished = true
-      game_state.result.scores.X = 1
-      game_state.result.scores.O = 1
+      game_state.finished = true
+      game_state.results.X = 1
+      game_state.results.O = 1
   | otherwise =>
-    game_state.result.finished = true
-    game_state.result.scores[winner] = 3
+    game_state.finished = true
+    game_state.results[winner] = 3
 
   game_state
-
-# Applies the move to the game_state and return a new game state
-apply_move = (game_state, move) ->
-  new_game_state = copy_game_state game_state
-
-  new_game_state.board[move.row][move.col] = game_state.active_role
-  switch game_state.active_role
-  | 'X' => new_game_state.active_role = 'O'
-  | otherwise => new_game_state.active_role = 'X'
-
-  new_game_state.valid_moves = get_valid_moves new_game_state
-
-  calculate_results new_game_state
-
-  new_game_state
-
 
 # As input to this a list of match_key entries are passed. These represent the players
 # the players will be allocated to the roles in the game state
 # Players : [ of match keys]
 #
-initial_game_state = (number_of_players) ->
+initial_game_state = ->
   roles = ['X','O']
   active_role = roles[0]
 
   game_state =
-    board: initial_board!
     roles: roles
-    active_role: active_role
-    result:
-      finished: false
-      scores:
-        X: 0
-        O: 0
+    finished: false
+    state_number: 0
+    results:
+      X: 0
+      O: 0
+    _private:
+      board: initial_board!
+      active_role: active_role
 
   game_state.valid_moves = get_valid_moves game_state
 
@@ -123,13 +111,31 @@ initial_game_state = (number_of_players) ->
 
 
 # Return a next game state after the move has been applied
+# moves is an object with the roles as keys and the move index
+# as the value. We can assume that moves will always be valid.
+# The harnass will make sure that random moves are selected
+# if the user is tardy.
 #
-next_game_state = (game_state, role, move_index) ->
-  move = game_state.valid_moves[role][move_index]
-  new_game_state = apply_move game_state, move
+next_game_state = (game_state, moves) ->
+  new_game_state = copy_game_state game_state
+  active_role = game_state._private.active_role
+
+  move = game_state.valid_moves[active_role][moves[active_role]]
+  new_game_state._private.board[move.row][move.col] = active_role
+
+  switch active_role
+  | 'X' => new_game_state._private.active_role = 'O'
+  | otherwise => new_game_state._private.active_role = 'X'
+
+  new_game_state.valid_moves = get_valid_moves new_game_state
+  calculate_results new_game_state
+
+  new_game_state.state_number = new_game_state.state_number + 1
+
+  new_game_state
+
 
 if module?
   module.exports =
     initial_game_state: initial_game_state
-    get_valid_moves: get_valid_moves
     next_game_state: next_game_state

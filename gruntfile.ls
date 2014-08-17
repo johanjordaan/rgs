@@ -23,16 +23,16 @@ module.exports = (grunt) ->
       serverSourceChanges:
         files:
            'src/*.ls'
-        tasks: ['deadscript' 'mochaTest']
+        tasks: ['deadscript' 'mochaTest:test']
       frontEndChanges:
         files:
            'client/src/*.ls'
            'client/*.html'
-        tasks: ['deadscript' 'copy:frontEndStatic' 'mochaTest']
+        tasks: ['deadscript' 'copy:frontEndStatic' 'mochaTest:test']
       testChanges:
         files:
            'src/test/*.ls'
-        tasks: ['deadscript' 'mochaTest']
+        tasks: ['deadscript' 'mochaTest:test']
 
 
     concurrent:
@@ -100,7 +100,28 @@ module.exports = (grunt) ->
       test:
         options:
           reporter: 'dot'
-        src: ['dist/test/**/*.js']
+        src: ['./dist/test/**/*.js']
+
+      coverage:
+        options:
+          reporter: 'dot'
+        src: ['./coverage/instrument/dist/test/**/*.js']
+
+
+    instrument:
+      files: 'dist/**/*.js'
+      options:
+        lazy: true
+        basePath: './coverage/instrument/'
+    storeCoverage:
+      options:
+        dir: './coverage/reports'
+    makeReport:
+      src: './coverage/reports/**/*.json',
+      options:
+        type: 'lcov',
+        dir: './coverage/reports',
+        print: 'detail'
 
 
   grunt.loadNpmTasks 'grunt-contrib-uglify'
@@ -112,6 +133,7 @@ module.exports = (grunt) ->
   grunt.loadNpmTasks 'grunt-forever'
   grunt.loadNpmTasks 'grunt-mocha-test'
   grunt.loadNpmTasks 'grunt-deadscript'
+  grunt.loadNpmTasks 'grunt-istanbul'
 
 
   grunt.registerTask 'devmon',  ['concurrent:apiAndAdmin']
@@ -119,3 +141,7 @@ module.exports = (grunt) ->
   grunt.registerTask 'adminmon',['concurrent:admin']
   grunt.registerTask 'test',    ['concurrent:tests']
   grunt.registerTask 'default', ['deadscript' 'copy:frontEndStatic' 'bowercopy']
+
+
+  grunt.registerTask 'coverage', ['deadscript','instrument', 'mochaTest:coverage',
+    'storeCoverage', 'makeReport']
