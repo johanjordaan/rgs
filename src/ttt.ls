@@ -49,7 +49,7 @@ get_valid_moves = (game_state) ->
       | 0 => moves_for_role[game_state._private.active_role].push do
           row:row
           col:col
-          description:"#{game_state.active_role} to row #{row} col #{col}"
+          description:"#{game_state._private.active_role} to row #{row} col #{col}"
       | otherwise =>
 
 

@@ -40,9 +40,11 @@ get_match_details = (agent,match_id,match_key,cb) ->
   .end (err,res) ->
     cb err,res.body
 
-submit_move = (agent,match_id,match_key,move_id,cb) ->
+submit_move = (agent,match_id,match_key,state_number,move_index,cb) ->
   agent.post "/api/v1/matches/#{match_id}/moves/?match_key=#{match_key}"
-  .send { move_id:move_id }
+  .send do
+    state_number: state_number
+    move_index: move_index
   .expect 200
   .end (err,res) ->
     cb err,res.body
@@ -151,7 +153,7 @@ describe 'api server : ', (done) ->
           moves = players |> _.map (player) ->
             | !player.match_key? => null
             | otherwise => (cb) ->
-                submit_move agent,match_id,player.match_key,0,cb
+                submit_move agent,match_id,player.match_key,0,0,cb
           |>  _.filter (move) ->
             move?
 

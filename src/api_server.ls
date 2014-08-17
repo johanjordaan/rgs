@@ -173,7 +173,7 @@ app.post '/api/v1/matches/:match_id/players', (req, res) ->
     | otherwise =>
       # The match is now full. Create the initail state and allocat players to roles
       #
-      saved_match.current_state = games[saved_match.game_id].module.initial_game_state 2
+      saved_match.current_state = games[saved_match.game_id].module.initial_game_state!
       saved_match.role_map = [p.match_key for p in saved_match.players]
         |> utils.shuffle
         |> _.zip saved_match.current_state.roles
@@ -199,21 +199,15 @@ app.post '/api/v1/matches/:match_id/players', (req, res) ->
 # nop move if there is not moves for you for this tuen. This also means that all players
 # will get al least the nop move.
 #
-# If a player has already submitted a move then allow them to update their move
-# If they submit an invalid move then return an error.
+# If a player has already submitted a move then allow them to update their move ??
+# If they submit an invalid move then return an error. ??
 #
 app.post '/api/v1/matches/:match_id/moves', (req, res) ->
   match_id = req.param 'match_id'
   match_key = req.param 'match_key'
 
-
   # Move needs to contain the state_number and the move index
   move  = req.body
-
-  db.matches.findAndModify { match_id: match_id , 'current_state.state_number':move.state_number }
-  ,[]
-  ,{ '$set' : { players:player }, '$inc' : { player_count:1}  }
-  , {new:true}, (err,saved_match) ->
 
   db.matches.findOne { match_id: match_id }, (err, amatch) ->
     | err? => res.status(400).send err
@@ -229,11 +223,29 @@ app.post '/api/v1/matches/:match_id/moves', (req, res) ->
       | !role? => res.status(200).send do
         status: 'ERROR'
         message: 'match_key not valid for this match'
+      | amatch.submitted_moves[role]? => res.status(200).send do
+          status: 'ERROR'
+          message: 'move already submitted'
       | otherwise =>
-        amatch.submitted_moves[role] = move.move_index
-        db.matches.save
+        db.matches.findAndModify { match_id: match_id , 'current_state.state_number':move.state_number, '$where':'this.submitted_moves_count<this.player_count'  }
+        ,[]
+        ,{ '$set' : { "submitted_moves.#{role}":move.move_index }, '$inc':{submitted_moves_count:1} }
+        , {new:true}, (err,saved_match) ->
+          | !saved_match? => res.status(200).send do
+            status: 'ERROR'
+            message: 'invalid state_number'
+          | otherwise =>
+            if saved_match.submitted_moves_count == saved_match.player_count
 
+              saved_match.current_state = games[saved_match.game_id].module.next_game_state saved_match.current_state,saved_match.submitted_moves
 
-      res.status(200).send do
-        status: 'OK'
-        match: amatch
+              db.matches.save saved_match, (err,write_status) ->
+                | err? => res.status(400).send err
+                | otherwise =>
+                  db.match_states.save saved_match.current_state, (err,saved_state) ->
+                    | err? => res.status(400).send err
+                    | otherwise => res.status(200).send do
+                      status: 'OK'
+            else
+              res.status(200).send do
+                status: 'OK'
