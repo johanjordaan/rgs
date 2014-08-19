@@ -144,37 +144,54 @@ describe 'api server : ', (done) ->
         expect(res.match).to.be.null
         done!
 
-    describe 'expected resuts from making a move', (done) ->
-      it 'should apply a valid move once all the players has submitted their moves', (done) ->
-        get_match_details agent,match_id,null, (err,res) ->
+    it 'should apply a valid move once all the players has submitted their moves', (done) ->
+      get_match_details agent,match_id,null, (err,res) ->
+        res.status.should.equal 'OK'
+        amatch = res.match
+
+        moves = players |> _.map (player) ->
+          | !player.match_key? => null
+          | otherwise => (cb) ->
+              submit_move agent,match_id,player.match_key,0,0,cb
+        |>  _.filter (move) ->
+          move?
+
+        moves[0] (err,res) ->
+          # After the first move the state should still be the same
           res.status.should.equal 'OK'
+          get_match_details agent,match_id,null, (err,res) ->
+            amatch = res.match
+            expect(amatch.current_state).to.exist
+            amatch.current_state.state_number.should.equal 0
+
+            moves[1] (err,res) ->
+              # After the second move the state should be updated
+              res.status.should.equal 'OK'
+
+              get_match_details agent,match_id,null, (err,res) ->
+                amatch = res.match
+                expect(amatch.current_state).to.exist
+                amatch.current_state.state_number.should.equal 1
+
+                done!
+
+    it 'should finish the match started above in less then 10 moves', (done) ->
+      q = async.queue (task,cb) ->
+        console.log task
+        submit_move agent,match_id,task.match_key,task.state_number,0, (err,res)->
           amatch = res.match
+          console.log res
+          console.log amatch.current_state.results
+          if amatch.current_state.finished
+            done!
+          else
+            q.push { match_key:task.match_key, state_number:task.state_number+1 }
+            cb!
+      ,1
 
-          moves = players |> _.map (player) ->
-            | !player.match_key? => null
-            | otherwise => (cb) ->
-                submit_move agent,match_id,player.match_key,0,0,cb
-          |>  _.filter (move) ->
-            move?
-
-          moves[0] (err,res) ->
-            # After the first move the state should still be the same
-            res.status.should.equal 'OK'
-            get_match_details agent,match_id,null, (err,res) ->
-              amatch = res.match
-              expect(amatch.current_state).to.exist
-              amatch.current_state.state_number.should.equal 0
-
-              moves[1] (err,res) ->
-                # After the second move the state should be updated
-                res.status.should.equal 'OK'
-
-                get_match_details agent,match_id,null, (err,res) ->
-                  amatch = res.match
-                  expect(amatch.current_state).to.exist
-                  amatch.current_state.state_number.should.equal 1
-
-                  done!
+      players |> _.each (player) ->
+        | !player.match_key? => null
+        | otherwise => q.push { match_key:player.match_key,state_number:1 }
 
 
 

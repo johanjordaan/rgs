@@ -208,6 +208,7 @@ app.post '/api/v1/matches/:match_id/moves', (req, res) ->
 
   # Move needs to contain the state_number and the move index
   move  = req.body
+  console.log move
 
   db.matches.findOne { match_id: match_id }, (err, amatch) ->
     | err? => res.status(400).send err
@@ -238,6 +239,7 @@ app.post '/api/v1/matches/:match_id/moves', (req, res) ->
             if saved_match.submitted_moves_count == saved_match.player_count
 
               saved_match.current_state = games[saved_match.game_id].module.next_game_state saved_match.current_state,saved_match.submitted_moves
+              saved_match.submitted_moves_count = 0
 
               db.matches.save saved_match, (err,write_status) ->
                 | err? => res.status(400).send err
@@ -246,6 +248,8 @@ app.post '/api/v1/matches/:match_id/moves', (req, res) ->
                     | err? => res.status(400).send err
                     | otherwise => res.status(200).send do
                       status: 'OK'
+                      match: saved_match
             else
               res.status(200).send do
                 status: 'OK'
+                match: saved_match
