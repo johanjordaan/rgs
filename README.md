@@ -3,6 +3,9 @@ rgs
 
 rest game service
 
+rest interface
+match -> open, waiting, inprogress, done and (aborted)
+
 
 # game developers
 =====================

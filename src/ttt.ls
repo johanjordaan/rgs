@@ -39,20 +39,22 @@ get_valid_moves = (game_state) ->
   # be active and not make a move so this will be remomved later
   #
   moves_for_role =
-    X: [{nop:true}]
-    O: [{nop:true}]
+    X: [{id:0,nop:true,description:"Do nothing"}]
+    O: [{id:0,nop:true,description:"Do nothing"}]
 
-  moves_for_role[game_state._private.active_role] = []
-  for row to 2
-    for col to 2
-      switch game_state._private.board[row][col]
-      | 0 => moves_for_role[game_state._private.active_role].push do
-          row:row
-          col:col
-          description:"#{game_state._private.active_role} to row #{row} col #{col}"
-      | otherwise =>
+  if !game_state.finished
+    moves_for_role[game_state._private.active_role] = []
 
-
+    id = 0
+    for row to 2
+      for col to 2
+        switch game_state._private.board[row][col]
+        | 0 => moves_for_role[game_state._private.active_role].push do
+            id:id++
+            row:row
+            col:col
+            description:"#{game_state._private.active_role} to row #{row} col #{col}"
+        | otherwise =>
 
   moves_for_role
 
@@ -127,8 +129,8 @@ next_game_state = (game_state, moves) ->
   | 'X' => new_game_state._private.active_role = 'O'
   | otherwise => new_game_state._private.active_role = 'X'
 
-  new_game_state.valid_moves = get_valid_moves new_game_state
   calculate_results new_game_state
+  new_game_state.valid_moves = get_valid_moves new_game_state
 
   new_game_state.state_number = new_game_state.state_number + 1
 

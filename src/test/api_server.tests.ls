@@ -36,9 +36,8 @@ join_match = (agent,match_id,player,cb) ->
 
 get_match_details = (agent,match_id,match_key,cb) ->
   agent.get "/api/v1/matches/#{match_id}/?match_key=#{match_key}"
-  .expect 200
   .end (err,res) ->
-    cb err,res.body
+    cb err,res.status,res.body
 
 submit_move = (agent,match_id,match_key,state_number,move_index,cb) ->
   agent.post "/api/v1/matches/#{match_id}/moves/?match_key=#{match_key}"
@@ -47,7 +46,7 @@ submit_move = (agent,match_id,match_key,state_number,move_index,cb) ->
     move_index: move_index
   .expect 200
   .end (err,res) ->
-    cb err,res.body
+    cb err,res.status,res.body
 
 describe 'api server : ', (done) ->
   var agent
@@ -108,44 +107,55 @@ describe 'api server : ', (done) ->
         res.matches.length.should.equal 0
         done!
 
-    it 'should add a player to the match if there is open spots and set the game status to in progress if the slots are full', (done) ->
-      async.parallel [
-        (cb) -> join_match agent,match_id,players[0],cb
-      , (cb) -> join_match agent,match_id,players[1],cb
-      , (cb) -> join_match agent,match_id,players[2],cb
-      ], (err,results) ->
-        results.length.should.equal 3
-        for i to 2
-          switch results[i].match_key?
-          | true =>
-            results[i].status.should.equal 'OK'
-            players[i].match_key = results[i].match_key
-          | otherwise =>
-            results[i].status.should.equal 'ERROR'
-            results[i].message.should.equal 'Match full'
-            players[i].match_key = null
-
-        db.matches.findOne { match_id:match_id }, (err,amatch) ->
-          amatch.players.length.should.equal 2
-          amatch.status.should.equal "inprogress"
-          expect(amatch.current_state).to.exist
-          amatch.current_state.state_number.should.equal 0
-          done!
-
     it 'should return the details of the match', (done) ->
-      get_match_details agent,match_id,null, (err,res) ->
+      get_match_details agent,match_id,null, (err,status,res) ->
+        status.should.equal 200
         res.status.should.equal 'OK'
         expect(res.match).to.exist
+        res.match.status.should.equal 'open'
         done!
 
     it 'should return an empty match if the math_id does not exist', (done) ->
-      get_match_details agent,'xxx',null, (err,res) ->
-        res.status.should.equal 'OK'
-        expect(res.match).to.be.null
+      get_match_details agent,'xxx',null, (err,status,res) ->
+        status.should.equal 404
+        expect(res.message).to.exist
+        res.message.should.equal 'Cannot find match [xxx]'
         done!
 
+    it 'should add a player to the match if there is open spots and set the game status to in progress if the slots are full', (done) ->
+      join_match agent,match_id,players[0], (err,res) ->
+        players[0].match_key = res.match_key
+        get_match_details agent,match_id,players[0].match_key, (err,status,res) ->
+          status.should.equal 200
+          amatch = res.match
+          amatch.status.should.equal = 'waiting'
+
+          async.parallel [
+            (cb) -> join_match agent,match_id,players[1],cb
+          , (cb) -> join_match agent,match_id,players[2],cb
+          ], (err,results) ->
+            results.length.should.equal 2
+            for i to 1
+              switch results[i].match_key?
+              | true =>
+                results[i].status.should.equal 'OK'
+                players[i+1].match_key = results[i].match_key
+              | otherwise =>
+                results[i].status.should.equal 'ERROR'
+                results[i].message.should.equal 'Match full'
+                players[i+1].match_key = null
+
+            # TODO: refcator to use match details call
+            db.matches.findOne { match_id:match_id }, (err,amatch) ->
+              amatch.players.length.should.equal 2
+              amatch.status.should.equal "inprogress"
+              expect(amatch.current_state).to.exist
+              amatch.current_state.state_number.should.equal 0
+              done!
+
     it 'should apply a valid move once all the players has submitted their moves', (done) ->
-      get_match_details agent,match_id,null, (err,res) ->
+      get_match_details agent,match_id,null, (err,status,res) ->
+        status.should.equal 200
         res.status.should.equal 'OK'
         amatch = res.match
 
@@ -156,33 +166,39 @@ describe 'api server : ', (done) ->
         |>  _.filter (move) ->
           move?
 
-        moves[0] (err,res) ->
+        moves[0] (err,status,res) ->
+          status.should.equal 200
           # After the first move the state should still be the same
           res.status.should.equal 'OK'
-          get_match_details agent,match_id,null, (err,res) ->
+          get_match_details agent,match_id,null, (err,status,res) ->
+            status.should.equal 200
             amatch = res.match
             expect(amatch.current_state).to.exist
             amatch.current_state.state_number.should.equal 0
 
-            moves[1] (err,res) ->
+            moves[1] (err,status,res) ->
+              status.should.equal 200
               # After the second move the state should be updated
               res.status.should.equal 'OK'
 
-              get_match_details agent,match_id,null, (err,res) ->
+              get_match_details agent,match_id,null, (err,status,res) ->
+                status.should.equal 200
                 amatch = res.match
                 expect(amatch.current_state).to.exist
                 amatch.current_state.state_number.should.equal 1
 
                 done!
 
+    end_state_number = 1
     it 'should finish the match started above in less then 10 moves', (done) ->
       q = async.queue (task,cb) ->
-        console.log task
-        submit_move agent,match_id,task.match_key,task.state_number,0, (err,res)->
+        submit_move agent,match_id,task.match_key,task.state_number,0, (err,status,res)->
           amatch = res.match
-          console.log res
-          console.log amatch.current_state.results
           if amatch.current_state.finished
+            amatch.current_state.state_number.should.be.at.least 5
+            amatch.current_state.state_number.should.be.at.most 9
+            amatch.status.should.equal 'done'
+            end_state_number := amatch.current_state.state_number+1
             done!
           else
             q.push { match_key:task.match_key, state_number:task.state_number+1 }
@@ -194,16 +210,7 @@ describe 'api server : ', (done) ->
         | otherwise => q.push { match_key:player.match_key,state_number:1 }
 
 
-
-/*
-              match_key = "xxxx"
-              mq = async.queue (task,cb) ->
-                poll_and_make_move agent,match_id,task.match_key, (finished) ->
-                  if !finished
-                    mq.push { match_key:match_key }
-                    cb()
-                  else
-                    done()
-              ,10
-
-              mq.push {count:0}*/
+    it 'should fail with an error if a move is submitted to a done game',(done) ->
+      submit_move agent,match_id,players[0].match_key,end_state_number+1,0, (err,status,res)->
+        status.should.equal 400
+        done!

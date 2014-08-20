@@ -26,8 +26,8 @@ module.exports = (grunt) ->
         tasks: ['deadscript' 'mochaTest:test']
       frontEndChanges:
         files:
-           'client/src/*.ls'
-           'client/*.html'
+           'src/client/*.ls'
+           'src/client/*.html'
         tasks: ['deadscript' 'copy:frontEndStatic' 'mochaTest:test']
       testChanges:
         files:
@@ -67,11 +67,11 @@ module.exports = (grunt) ->
       frontEndStatic:
         files: [
          * expand: true
-           cwd: 'client/'
+           cwd: 'src/client/'
            src: ['*.html']
            dest: 'dist/client/'
          * expand: true
-           cwd: 'client/'
+           cwd: 'src/client/'
            src: ['libs/**']
            dest: 'dist/client/'
         ]
@@ -85,6 +85,7 @@ module.exports = (grunt) ->
         files:
            'angular/angular.js': 'angular/angular.js'
            'angular/angular-route.js': 'angular-route/angular-route.js'
+           'angular/angular-resource.js': 'angular-resource/angular-resource.js'
 
     forever:
       adminServer:

@@ -10,6 +10,8 @@ app = express()
 # Configure express
 #app.use logging 'dev'
 app.use bodyParser.json()
+console.log __dirname + '/'
+app.use '/',express.static(__dirname + '/client')
 
 server = (require 'http').createServer app
 
@@ -74,12 +76,17 @@ app.get '/api/v1/games', (req, res) ->
 #
 app.get '/api/v1/matches', (req, res) ->
   game_id = req.param 'game_id'
+  status = req.param 'status'
+
+  fltr = {}
+  if game_id? then fltr.game_id = game_id
+  if status? then fltr.status = status
 
   # TODO : The matches needs to be sanatised
   # TODO : Remove state info etc so sanatisation might not be required
   # Just do it via find field filter
   #
-  db.matches.find( { game_id: game_id } ).toArray (err, matches) ->
+  db.matches.find( fltr ).toArray (err, matches) ->
     | err? => res.status(400).send err
     | otherwise => res.status(200).send do
       status: 'OK'
@@ -128,10 +135,13 @@ app.get '/api/v1/matches/:match_id', (req, res) ->
   # this is to prevent private game data from being leaked
   #
   db.matches.findOne { match_id: match_id }, (err, amatch) ->
-    | err? => res.status(400).send err
-    | otherwise => res.status(200).send do
-      status: 'OK'
-      match: amatch
+    | err? => res.status(500).send err
+    | otherwise =>
+      switch
+      | !amatch? => res.status(404).send { message:"Cannot find match [#{match_id}]" }
+      | otherwise => res.status(200).send do
+        status: 'OK'
+        match: amatch
 
 
 # Get the states in the match
@@ -157,7 +167,7 @@ app.post '/api/v1/matches/:match_id/players', (req, res) ->
   player = req.body
 
   player.match_key = utils.generate_token {}
-  db.matches.findAndModify { match_id: match_id , '$where':'this.player_count<this.required_players' },[] ,{ '$push' : { players:player }, '$inc' : { player_count:1}  }, {new:true}, (err,saved_match) ->
+  db.matches.findAndModify { match_id: match_id , '$where':'this.player_count<this.required_players' },[] ,{ '$push' : { players:player }, '$inc' : { player_count:1}, '$set':{'status':'waiting'}  }, {new:true}, (err,saved_match) ->
     | err? => res.status(400).send err
     | !saved_match?
       res.status(200).send do
@@ -208,16 +218,13 @@ app.post '/api/v1/matches/:match_id/moves', (req, res) ->
 
   # Move needs to contain the state_number and the move index
   move  = req.body
-  console.log move
 
   db.matches.findOne { match_id: match_id }, (err, amatch) ->
     | err? => res.status(400).send err
     | !amatch? => res.status(200).send do
       status: 'ERROR'
       message: 'Match not found'
-    | amatch.status != 'inprogress' => res.status(200).send do
-      status: 'ERROR'
-      message: 'Math not in progress'
+    | amatch.status != 'inprogress' => res.status(400).send { message: "Match [#{match_id}] not in progress" }
     | otherwise =>
       role = amatch.role_map[match_key]
       switch role
@@ -240,6 +247,8 @@ app.post '/api/v1/matches/:match_id/moves', (req, res) ->
 
               saved_match.current_state = games[saved_match.game_id].module.next_game_state saved_match.current_state,saved_match.submitted_moves
               saved_match.submitted_moves_count = 0
+              if saved_match.current_state.finished
+                saved_match.status = 'done'
 
               db.matches.save saved_match, (err,write_status) ->
                 | err? => res.status(400).send err
