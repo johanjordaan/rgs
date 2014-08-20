@@ -9,22 +9,19 @@ app = require '../api_server'
 
 list_games  = (agent,filter,cb) ->
   agent.get '/api/v1/games'
-  .expect 200
   .end (err,res) ->
-    cb err,res.body
+    cb err,res.status,res.body
 
 list_matches = (agent,game_id_filter,cb) ->
   agent.get "/api/v1/matches/?game_id=#{game_id_filter}"
-  .expect 200
   .end (err,res) ->
-    cb err,res.body
+    cb err,res.status,res.body
 
 create_match = (agent,game_id,cb) ->
   agent.post '/api/v1/matches'
   .send { game_id: game_id }
-  .expect 200
   .end (err,res) ->
-    cb err,res.body
+    cb err,res.status,res.body
 
 join_match = (agent,match_id,player,cb) ->
   agent.post "/api/v1/matches/#{match_id}/players"
@@ -62,10 +59,10 @@ describe 'api server : ', (done) ->
 
   describe '/api/v1/games : ', (done) ->
     it 'should return a list of games available', (done) ->
-      list_games agent,null, (err,res) ->
-        res.status.should.equal 'OK'
-        res.games.length.should.equal 2
-        res.games[0].game_id.should.equal "ttt"
+      list_games agent,null, (err,status,res) ->
+        status.should.equal 200
+        res.length.should.equal 2
+        res[0].game_id.should.equal "ttt"
         done!
 
   describe '/api/vi/matches : ', (done) ->
@@ -78,33 +75,35 @@ describe 'api server : ', (done) ->
     ]
 
     it 'should return a list of matches', (done) ->
-      list_matches agent,null, (err,res) ->
-        res.status.should.equal 'OK'
-        res.matches.length.should.equal 0
+      list_matches agent,null, (err,status,res) ->
+        status.should.equal 200
+        res.length.should.equal 0
         done!
 
     it 'should create a new match', (done) ->
-      create_match agent,'ttt', (err,res) ->
-        res.status.should.equal 'OK'
-        match_id := res.match.match_id
+      create_match agent,'ttt', (err,status,res) ->
+        status.should.equal 200
+        res.status.should.equal "open"
+        match_id := res.match_id
         done!
 
     it 'should return an error if the an invalid game id is specified on match creation', (done) ->
-      create_match agent,'xxx', (err,res) ->
-        res.status.should.equal 'ERROR'
+      create_match agent,'xxx', (err,status,res) ->
+        status.should.equal 400
+        res.message.should.equal "Game [xxx] does not exist"
         done!
 
 
     it 'should return a list a matches given a game_id filter', (done) ->
-      list_matches agent,'ttt', (err,res) ->
-        res.status.should.equal 'OK'
-        res.matches.length.should.equal 1
+      list_matches agent,'ttt', (err,status,res) ->
+        status.should.equal 200
+        res.length.should.equal 1
         done!
 
     it 'should return a list a matches given a game_id filter that doesnt match any matches', (done) ->
-      list_matches agent,'xxx', (err,res) ->
-        res.status.should.equal 'OK'
-        res.matches.length.should.equal 0
+      list_matches agent,'xxx', (err,status,res) ->
+        status.should.equal 200
+        res.length.should.equal 0
         done!
 
     it 'should return the details of the match', (done) ->

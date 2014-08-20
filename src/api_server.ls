@@ -66,9 +66,7 @@ sanitize_players = (player_list) ->
 # Get a list of games
 #
 app.get '/api/v1/games', (req, res) ->
-  res.status(200).send do
-    status: 'OK'
-    games: games_list
+  res.status(200).send games_list
 
 # Get a list of matches
 # Request parameter filters : game_status
@@ -87,10 +85,8 @@ app.get '/api/v1/matches', (req, res) ->
   # Just do it via find field filter
   #
   db.matches.find( fltr ).toArray (err, matches) ->
-    | err? => res.status(400).send err
-    | otherwise => res.status(200).send do
-      status: 'OK'
-      matches: matches
+    | err? => res.status(500).send err
+    | otherwise => res.status(200).send matches
 
 # Creates a new match
 # The game_id should be one of the game_id's in the list of games
@@ -100,10 +96,7 @@ app.post '/api/v1/matches', (req, res) ->
   game = games[game_id]
 
   switch game?
-    | false =>
-      res.status(200).send do
-        status: 'ERROR'
-        message: "#{game_id} does not exist"
+    | false => res.status(400).send { message: "Game [#{game_id}] does not exist" }
     | otherwise =>
       options = game.options
       new_match =
@@ -119,10 +112,8 @@ app.post '/api/v1/matches', (req, res) ->
         submitted_moves_count: 0
 
       db.matches.save new_match, (err,saved_match) ->
-        | err? => res.status(400).send err
-        | otherwise => res.status(200).send do
-          status: 'OK'
-          match: saved_match
+        | err? => res.status(500).send err
+        | otherwise => res.status(200).send saved_match
 
 # get the match details
 # Request parameter : match_key - if not presented then only public data is returned,
