@@ -136,7 +136,7 @@ next_game_state = (game_state, moves) ->
 
   new_game_state
 
-
+/* istanbul ignore else */
 if module?
   module.exports =
     initial_game_state: initial_game_state

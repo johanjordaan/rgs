@@ -11,7 +11,7 @@ generate_token = (data) ->
 shuffle = (source) ->
     result  = source |> _.map (element) -> element
     # From the end of the list to the beginning, pick element `i`.
-    for i in [result.length-1 to 1]
+    for i in [0 to result.length-1]
       # Choose random element `j` to the front of `i` to swap with.
       j = Math.floor Math.random() * (i + 1)
       # Swap `j` with `i`, using destructured assignment
@@ -23,6 +23,7 @@ random_pick = (source) ->
   shuffled_list = source |> shuffle
   return shuffled_list[0]
 
+/* istanbul ignore else */
 if module?
   module.exports =
     generate_token: generate_token

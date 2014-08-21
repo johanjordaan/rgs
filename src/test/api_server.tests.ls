@@ -12,8 +12,8 @@ list_games  = (agent,filter,cb) ->
   .end (err,res) ->
     cb err,res.status,res.body
 
-list_matches = (agent,game_id_filter,cb) ->
-  agent.get "/api/v1/matches/?game_id=#{game_id_filter}"
+list_matches = (agent,game_id_filter,status_filter,cb) ->
+  agent.get "/api/v1/matches/?game_id=#{game_id_filter}&status=#{status_filter}"
   .end (err,res) ->
     cb err,res.status,res.body
 
@@ -74,8 +74,8 @@ describe 'api server : ', (done) ->
       *name: 'sue'
     ]
 
-    it 'should return a list of matches', (done) ->
-      list_matches agent,null, (err,status,res) ->
+    it 'should return a list of all matches(no filter)', (done) ->
+      list_matches agent,null,null, (err,status,res) ->
         status.should.equal 200
         res.length.should.equal 0
         done!
@@ -95,23 +95,28 @@ describe 'api server : ', (done) ->
 
 
     it 'should return a list a matches given a game_id filter', (done) ->
-      list_matches agent,'ttt', (err,status,res) ->
+      list_matches agent,'ttt',null, (err,status,res) ->
         status.should.equal 200
         res.length.should.equal 1
         done!
 
     it 'should return a list a matches given a game_id filter that doesnt match any matches', (done) ->
-      list_matches agent,'xxx', (err,status,res) ->
+      list_matches agent,'xxx',null, (err,status,res) ->
         status.should.equal 200
         res.length.should.equal 0
         done!
 
+    it 'should return a list of matches that match the game_id and a status', (done) ->
+      list_matches agent,'ttt','waiting', (err,status,res) ->
+        status.should.equal 200
+        res.length.should.equal 0
+        done!
+
+
     it 'should return the details of the match', (done) ->
       get_match_details agent,match_id,null, (err,status,res) ->
         status.should.equal 200
-        res.status.should.equal 'OK'
-        expect(res.match).to.exist
-        res.match.status.should.equal 'open'
+        res.status.should.equal 'open'
         done!
 
     it 'should return an empty match if the math_id does not exist', (done) ->
@@ -126,7 +131,7 @@ describe 'api server : ', (done) ->
         players[0].match_key = res.match_key
         get_match_details agent,match_id,players[0].match_key, (err,status,res) ->
           status.should.equal 200
-          amatch = res.match
+          amatch = res
           amatch.status.should.equal = 'waiting'
 
           async.parallel [
@@ -137,25 +142,25 @@ describe 'api server : ', (done) ->
             for i to 1
               switch results[i].match_key?
               | true =>
-                results[i].status.should.equal 'OK'
                 players[i+1].match_key = results[i].match_key
               | otherwise =>
                 results[i].status.should.equal 'ERROR'
                 results[i].message.should.equal 'Match full'
                 players[i+1].match_key = null
 
-            # TODO: refcator to use match details call
-            db.matches.findOne { match_id:match_id }, (err,amatch) ->
-              amatch.players.length.should.equal 2
-              amatch.status.should.equal "inprogress"
-              expect(amatch.current_state).to.exist
-              amatch.current_state.state_number.should.equal 0
+
+            get_match_details agent,match_id,players[0].match_key, (err,status,res) ->
+              status.should.equal 200
+              amatch = res
+              amatch.status.should.equal = 'inprogress'
               done!
+
+
 
     it 'should apply a valid move once all the players has submitted their moves', (done) ->
       get_match_details agent,match_id,null, (err,status,res) ->
         status.should.equal 200
-        res.status.should.equal 'OK'
+        res.status.should.equal 'inprogress'
         amatch = res.match
 
         moves = players |> _.map (player) ->
@@ -168,24 +173,18 @@ describe 'api server : ', (done) ->
         moves[0] (err,status,res) ->
           status.should.equal 200
           # After the first move the state should still be the same
-          res.status.should.equal 'OK'
-          get_match_details agent,match_id,null, (err,status,res) ->
+          get_match_details agent,match_id,null, (err,status,amatch) ->
             status.should.equal 200
-            amatch = res.match
             expect(amatch.current_state).to.exist
             amatch.current_state.state_number.should.equal 0
 
             moves[1] (err,status,res) ->
               status.should.equal 200
               # After the second move the state should be updated
-              res.status.should.equal 'OK'
-
-              get_match_details agent,match_id,null, (err,status,res) ->
+              get_match_details agent,match_id,null, (err,status,amatch) ->
                 status.should.equal 200
-                amatch = res.match
                 expect(amatch.current_state).to.exist
                 amatch.current_state.state_number.should.equal 1
-
                 done!
 
     end_state_number = 1
@@ -212,4 +211,31 @@ describe 'api server : ', (done) ->
     it 'should fail with an error if a move is submitted to a done game',(done) ->
       submit_move agent,match_id,players[0].match_key,end_state_number+1,0, (err,status,res)->
         status.should.equal 400
+        done!
+
+
+  describe 'Negative testing', (done) ->
+    var broken_agent
+
+    before (done) ->
+      mongo = require 'mongoskin'
+      db_name = "mongodb://xxx/rgs_test"
+      db := mongo.db db_name, {native_parser:true}
+      broken_agent := request app(db)
+      done!
+
+    it 'should return a 500 error since the db is broken when getting a list of matches', (done) ->
+      list_matches broken_agent,null,null, (err,status,res) ->
+        status.should.equal 500
+        done!
+
+    it 'should return a 500 when trying to create a macth since the dbd is broken', (done) ->
+      create_match agent,'ttt', (err,status,res) ->
+        status.should.equal 500
+        done!
+
+
+    it 'should return the details of the match', (done) ->
+      get_match_details agent,'xxxxxx',null, (err,status,res) ->
+        status.should.equal 500
         done!

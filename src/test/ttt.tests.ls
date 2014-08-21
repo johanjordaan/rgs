@@ -79,4 +79,25 @@ describe 'Tick-Tac-Toe', (done) ->
       next_game_state.results.X.should.equal 3
       next_game_state.results.O.should.equal 0
       done!
-      
+
+
+    describe 'playing a couple of random games', (done) ->
+      pick_move = (moves) ->
+        utils.random_pick [0 to moves.length-1]
+
+      it 'should finish the game in between 5 and 9 moves(inclusive)', (done) ->
+        for i to 1000
+          game_state = ttt.initial_game_state!
+          moves = { 'X':[pick_move(game_state.valid_moves.X)],'O':[pick_move(game_state.valid_moves.O)] }
+          next_game_state = ttt.next_game_state game_state, moves
+          count = 1
+          while !next_game_state.finished and count<11
+            moves = { 'X':[pick_move(next_game_state.valid_moves.X)],'O':[pick_move(next_game_state.valid_moves.O)] }
+            next_game_state := ttt.next_game_state next_game_state, moves
+            count := count + 1
+
+          next_game_state.finished.should.equal true
+          count.should.be.at.least 5
+          count.should.be.at.most 9
+
+        done!

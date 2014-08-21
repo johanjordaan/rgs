@@ -25,11 +25,13 @@ db.bind 'matches'
 db.bind 'match_states'
 
 
+/* istanbul ignore if */
 if require.main == module
   server.listen LISTEN_PORT, ->
      console.log "rgs API Server - Listening on port #{LISTEN_PORT}"
 else
   module.exports = (test_db) ->
+    /* istanbul ignore else */
     if test_db?
       db := test_db
       db.bind 'matches'
@@ -54,13 +56,6 @@ games =
 games_list = games |> _.values |> _.map (game) -> { game_id: game.game_id, description: game.description }
 
 
-######## General methods
-utils = require './utils'
-
-# Removes the player key from the player list
-sanitize_players = (player_list) ->
-  player_list |> _.map (player) -> delete player.player_key
-
 ######## Rest Interface
 
 # Get a list of games
@@ -77,8 +72,8 @@ app.get '/api/v1/matches', (req, res) ->
   status = req.param 'status'
 
   fltr = {}
-  if game_id? then fltr.game_id = game_id
-  if status? then fltr.status = status
+  if game_id? and game_id != 'null' then fltr.game_id = game_id
+  if status? and status != 'null' then fltr.status = status
 
   # TODO : The matches needs to be sanatised
   # TODO : Remove state info etc so sanatisation might not be required
@@ -130,9 +125,7 @@ app.get '/api/v1/matches/:match_id', (req, res) ->
     | otherwise =>
       switch
       | !amatch? => res.status(404).send { message:"Cannot find match [#{match_id}]" }
-      | otherwise => res.status(200).send do
-        status: 'OK'
-        match: amatch
+      | otherwise => res.status(200).send amatch
 
 
 # Get the states in the match
