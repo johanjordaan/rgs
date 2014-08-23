@@ -23,9 +23,24 @@ random_pick = (source) ->
   shuffled_list = source |> shuffle
   return shuffled_list[0]
 
+
+fail = (ctx,f_name,threshold,fcb) ->
+  f = ctx[f_name]
+  count = 0
+  ctx[f_name] = ->
+    if count>=threshold
+      ctx[f_name] = f
+      fcb.apply this,arguments
+    else
+      count := count+1
+      f.apply this,arguments
+  null
+
+
 /* istanbul ignore else */
 if module?
   module.exports =
     generate_token: generate_token
     shuffle: shuffle
     random_pick: random_pick
+    fail: fail

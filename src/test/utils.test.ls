@@ -22,7 +22,6 @@ describe 'utils', (done) ->
       token.length.should.equal 64
       done!
 
-
   describe 'shuffle',(done) ->
     list = [1 to 20]
     shuffled_list = utils.shuffle list
@@ -37,4 +36,26 @@ describe 'utils', (done) ->
 
     it 'should pick a random elemnt form the list', (done)->
       number = utils.random_pick list
+      done!
+
+
+  describe 'fail', (done) ->
+    math =
+      add : (a,b) ->
+        a+b
+
+    add = math.add
+
+    utils.fail math,'add',2, -> "Error"
+
+    it 'should not fail for the fisrt two calls',(done) ->
+      s = math.add 1,2
+      s.should.equal 3
+      s = math.add 9,2
+      s.should.equal 11
+      done!
+
+    it 'should fail on the 3de call',(done) ->
+      s = math.add 1,2
+      s.should.equal "Error"
       done!
