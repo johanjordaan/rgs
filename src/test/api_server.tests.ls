@@ -26,9 +26,8 @@ create_match = (agent,game_id,cb) ->
 join_match = (agent,match_id,player,cb) ->
   agent.post "/api/v1/matches/#{match_id}/players"
   .send player
-  .expect 200
   .end (err,res) ->
-    cb err,res.body
+    cb err,res.status,res.body
 
 
 get_match_details = (agent,match_id,match_key,cb) ->
@@ -119,7 +118,7 @@ describe 'api server : ', (done) ->
         res.status.should.equal 'open'
         done!
 
-    it 'should return an empty match if the math_id does not exist', (done) ->
+    it 'should return an empty match if the match_id does not exist', (done) ->
       get_match_details agent,'xxx',null, (err,status,res) ->
         status.should.equal 404
         expect(res.message).to.exist
@@ -127,7 +126,8 @@ describe 'api server : ', (done) ->
         done!
 
     it 'should add a player to the match if there is open spots and set the game status to in progress if the slots are full', (done) ->
-      join_match agent,match_id,players[0], (err,res) ->
+      join_match agent,match_id,players[0], (err,status,res) ->
+        status.should.equal 200
         players[0].match_key = res.match_key
         get_match_details agent,match_id,players[0].match_key, (err,status,res) ->
           status.should.equal 200
@@ -135,17 +135,20 @@ describe 'api server : ', (done) ->
           amatch.status.should.equal = 'waiting'
 
           async.parallel [
-            (cb) -> join_match agent,match_id,players[1],cb
-          , (cb) -> join_match agent,match_id,players[2],cb
+            (cb) -> join_match agent,match_id,players[1],(err,status,res)->
+              cb null,{ status:status,res:res }
+          , (cb) -> join_match agent,match_id,players[2],(err,status,res)->
+            cb null,{ status:status,res:res }
           ], (err,results) ->
             results.length.should.equal 2
             for i to 1
-              switch results[i].match_key?
+              switch results[i].res.match_key?
               | true =>
-                players[i+1].match_key = results[i].match_key
+                results[i].status.should.equal 200
+                players[i+1].match_key = results[i].res.match_key
               | otherwise =>
-                results[i].status.should.equal 'ERROR'
-                results[i].message.should.equal 'Match full'
+                results[i].status.should.equal 400
+                results[i].res.message.should.equal "Match [#{match_id}] is no longer accepting players"
                 players[i+1].match_key = null
 
 
@@ -178,20 +181,40 @@ describe 'api server : ', (done) ->
             expect(amatch.current_state).to.exist
             amatch.current_state.state_number.should.equal 0
 
-            moves[1] (err,status,res) ->
-              status.should.equal 200
-              # After the second move the state should be updated
-              get_match_details agent,match_id,null, (err,status,amatch) ->
+
+            # If the user submits a move when they have already submitted on then
+            # ignore the alst submitted and return an error
+            # TODO : ractyror this test case
+            moves[0] (err,status,res) ->
+              status.should.equal 400
+
+              moves[1] (err,status,res) ->
                 status.should.equal 200
-                expect(amatch.current_state).to.exist
-                amatch.current_state.state_number.should.equal 1
-                done!
+                # After the second move the state should be updated
+                get_match_details agent,match_id,null, (err,status,amatch) ->
+                  status.should.equal 200
+                  expect(amatch.current_state).to.exist
+                  amatch.current_state.state_number.should.equal 1
+                  done!
+
+
+    it 'should return an error if the match_key does not exist for the game', (done) ->
+      submit_move agent,match_id,'xxxxxx',1,0, (err,status,res)->
+        status.should.equal 400
+        res.message.should.equal "Match [#{match_id}] does not accept match_key [xxxxxx]"
+        done!
+
+    it 'should return an error if the state_number of the move do no match the current state of the game', (done) ->
+      invalid_state_number = 0
+      submit_move agent,match_id,players[0].match_key,invalid_state_number,0, (err,status,res)->
+        status.should.equal 400
+        res.message.should.equal "Invalid state number [#{invalid_state_number}] for match_id [#{match_id}]"
+        done!
 
     end_state_number = 1
     it 'should finish the match started above in less then 10 moves', (done) ->
       q = async.queue (task,cb) ->
-        submit_move agent,match_id,task.match_key,task.state_number,0, (err,status,res)->
-          amatch = res.match
+        submit_move agent,match_id,task.match_key,task.state_number,0, (err,status,amatch)->
           if amatch.current_state.finished
             amatch.current_state.state_number.should.be.at.least 5
             amatch.current_state.state_number.should.be.at.most 9
@@ -213,29 +236,200 @@ describe 'api server : ', (done) ->
         status.should.equal 400
         done!
 
+    it 'should fail with an error if a move is submitted to a invalid game',(done) ->
+      submit_move agent,'xxxx',players[0].match_key,end_state_number+1,0, (err,status,res)->
+        status.should.equal 404
+        done!
+
 
   describe 'Negative testing', (done) ->
-    var broken_agent
+    destabilise = (o,spec) ->
+      restore_point = {}
+      spec.methods |> _.each (method_name) ->
+        restore_point[method_name] = o[method_name]
+        o[method_name] = fail_after spec.fail_after,spec.handler,o[method_name]
+      restore_point
+
+    restore = (o,restore_point) ->
+      restore_point |> _.keys |> _.each (method_name) ->
+        o[method_name] = restore_point[method_name]
+      o
+
+
+    fail_after = (threshold,fcb,f) ->
+      count = 0
+      ->
+        if count>=threshold
+          fcb.apply this,arguments
+        else
+          count := count+1
+          f.apply this,arguments
+
+    var agent
+    var db
 
     before (done) ->
       mongo = require 'mongoskin'
-      db_name = "mongodb://xxx/rgs_test"
+      db_name = "mongodb://localhost/rgs_test"
       db := mongo.db db_name, {native_parser:true}
-      broken_agent := request app(db)
+      db.dropDatabase!
+      agent := request app(db)
       done!
 
-    it 'should return a 500 error since the db is broken when getting a list of matches', (done) ->
-      list_matches broken_agent,null,null, (err,status,res) ->
-        status.should.equal 500
+    describe 'xxx',(done) ->
+      it 'should return a 500 error since the db is broken when getting a list of matches', (done) ->
+        rp = destabilise db.matches,
+          methods : ['findItems']
+          fail_after: 0
+          handler: ->
+            arguments[1]("Error",null)
+
+        list_matches agent,null,null, (err,status,res) ->
+          status.should.equal 500
+          restore db.matches,rp
+          done!
+
+      it 'should return a 500 when trying to create a macth since the dbd is broken', (done) ->
+        rp = destabilise db.matches,
+          methods : ['save']
+          fail_after: 0
+          handler: ->
+            arguments[1]("Error",null)
+
+        create_match agent,'ttt', (err,status,res) ->
+          status.should.equal 500
+          restore db.matches,rp
+          done!
+
+      it 'should return a 500 when returning the details of the match', (done) ->
+        rp = destabilise db.matches,
+          methods : ['findOne']
+          fail_after: 0
+          handler: ->
+            arguments[1]("Error",null)
+
+        get_match_details agent,'xxxxxx',null, (err,status,res) ->
+          status.should.equal 500
+          restore db.matches,rp
         done!
 
-    it 'should return a 500 when trying to create a macth since the dbd is broken', (done) ->
-      create_match agent,'ttt', (err,status,res) ->
-        status.should.equal 500
-        done!
 
 
-    it 'should return the details of the match', (done) ->
-      get_match_details agent,'xxxxxx',null, (err,status,res) ->
-        status.should.equal 500
-        done!
+      describe 'match match joing failures',(done) ->
+        it 'should fail witha 500 if the db fails when trying to find the match to join', (done) ->
+          rp = destabilise db.matches,
+            methods : ['findAndModify']
+            fail_after: 0
+            handler: ->
+              arguments[4]("Error",null)
+
+          create_match agent,'ttt', (err,status,res) ->
+            match_id = res.match_id
+            join_match agent, match_id, {name:'johan'}, (err,status,res)->
+              status.should.equal 500
+              restore db.matches,rp
+              done!
+
+
+        it 'should fail witha 500 if the db fails when trying to save the match to join', (done) ->
+          rp = destabilise db.matches,
+            methods : ['save']
+            fail_after: 1
+            handler: ->
+              arguments[1]("Error",null)
+
+          create_match agent,'ttt', (err,status,res) ->
+            match_id = res.match_id
+            join_match agent, match_id, {name:'johan'}, (err,status,res)->
+              join_match agent, match_id, {name:'peter'}, (err,status,res)->
+                status.should.equal 500
+                restore db.matches,rp
+                done!
+
+        it 'should fail witha 500 if the db fails when trying to save the match state to join', (done) ->
+          rp = destabilise db.match_states,
+            methods : ['save']
+            fail_after: 0
+            handler: ->
+              arguments[1]("Error",null)
+
+          create_match agent,'ttt', (err,status,res) ->
+            match_id = res.match_id
+            join_match agent, match_id, {name:'johan'}, (err,status,res)->
+              join_match agent, match_id, {name:'peter'}, (err,status,res)->
+                status.should.equal 500
+                restore db.match_states,rp
+                done!
+
+        describe 'failures on move submission',(done) ->
+          start_match = (cb) ->
+            create_match agent,'ttt', (err,status,res) ->
+              match_id = res.match_id
+              players =
+                *name:'johan'
+                *name:'paul'
+              join_match agent, match_id,players[0], (err,status,res)->
+                players[0].match_key = res.match_key
+                join_match agent, match_id, players[1], (err,status,res)->
+                  players[1].match_key = res.match_key
+                  cb(match_id,players)
+
+          it 'should retunr 500 if the match find query fails', (done) ->
+            start_match (match_id,players) ->
+
+              rp = destabilise db.matches,
+                methods : ['findOne']
+                fail_after: 0
+                handler: ->
+                  arguments[1]("Error",null)
+
+              submit_move agent,match_id,players[0].match_key,0,0, (err,status,res) ->
+                status.should.equal 500
+
+                restore db.matches,rp
+                done!
+
+          it 'should return 500 if the match findAndModify query fails', (done) ->
+            start_match (match_id,players) ->
+
+              rp = destabilise db.matches,
+                methods : ['findAndModify']
+                fail_after: 0
+                handler: ->
+                  arguments[4]("Error",null)
+
+              submit_move agent,match_id,players[0].match_key,0,0, (err,status,res) ->
+                status.should.equal 500
+
+                restore db.matches,rp
+                done!
+
+          it 'should return 500 if the match save query fails', (done) ->
+            start_match (match_id,players) ->
+              rp = destabilise db.matches,
+                methods : ['save']
+                fail_after: 0
+                handler: ->
+                  arguments[1]("Error",null)
+
+              submit_move agent,match_id,players[0].match_key,0,0, (err,status,res) ->
+                submit_move agent,match_id,players[1].match_key,0,0, (err,status,res) ->
+                  status.should.equal 500
+
+                  restore db.matches,rp
+                  done!
+
+          it 'should return 500 if the match_state save query fails', (done) ->
+            start_match (match_id,players) ->
+              rp = destabilise db.match_states,
+                methods : ['save']
+                fail_after: 0
+                handler: ->
+                  arguments[1]("Error",null)
+
+              submit_move agent,match_id,players[0].match_key,0,0, (err,status,res) ->
+                submit_move agent,match_id,players[1].match_key,0,0, (err,status,res) ->
+                  status.should.equal 500
+
+                  restore db.match_states,rp
+                  done!

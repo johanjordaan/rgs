@@ -7,6 +7,14 @@ rest interface
 match -> open, waiting, inprogress, done and (aborted)
 
 
+Error codes
+====================
+200 OK
+400 Invalid parameters
+404 Not Found
+500 Fatal error
+
+
 # game developers
 =====================
 Your game needs to provide two methods

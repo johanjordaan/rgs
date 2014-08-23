@@ -79,7 +79,7 @@ app.get '/api/v1/matches', (req, res) ->
   # TODO : Remove state info etc so sanatisation might not be required
   # Just do it via find field filter
   #
-  db.matches.find( fltr ).toArray (err, matches) ->
+  db.matches.findItems fltr, (err, matches) ->
     | err? => res.status(500).send err
     | otherwise => res.status(200).send matches
 
@@ -151,21 +151,19 @@ app.post '/api/v1/matches/:match_id/players', (req, res) ->
   player = req.body
 
   player.match_key = utils.generate_token {}
-  db.matches.findAndModify { match_id: match_id , '$where':'this.player_count<this.required_players' },[] ,{ '$push' : { players:player }, '$inc' : { player_count:1}, '$set':{'status':'waiting'}  }, {new:true}, (err,saved_match) ->
-    | err? => res.status(400).send err
-    | !saved_match?
-      res.status(200).send do
-        status: 'ERROR'
-        message: 'Match full'
-
+  db.matches.findAndModify { match_id: match_id , '$where':'this.player_count<this.required_players' }
+  ,[]
+  ,{ '$push' : { players:player }, '$inc' : { player_count:1} /*,'$set':{'status':'open'}*/  }
+  , {new:true}
+  , (err,saved_match) ->
+    | err? => res.status(500).send err
+    | !saved_match? => res.status(400).send { message : "Match [#{match_id}] is no longer accepting players" }
     | saved_match.players.length < saved_match.required_players =>
       # The match is still open but now with one less spot
       #
-      res.status(200).send do
-        status: 'OK'
-        match_key: player.match_key
+      res.status(200).send { match_key: player.match_key }
     | otherwise =>
-      # The match is now full. Create the initail state and allocat players to roles
+      # The match is now full. Create the initial state and allocate players to roles
       #
       saved_match.current_state = games[saved_match.game_id].module.initial_game_state!
       saved_match.role_map = [p.match_key for p in saved_match.players]
@@ -175,13 +173,17 @@ app.post '/api/v1/matches/:match_id/players', (req, res) ->
         |> _.pairs-to-obj
       saved_match.status = "inprogress"
       db.matches.save saved_match, (err,write_status) ->
-        | err? => res.status(400).send err
+        | err? => res.status(500).send err
         | otherwise =>
+
+          # TODO : What do we do if we fail at this point? We cannot fix anything?
+          # Should we maybbe first save this state or should we do this bootstrap on
+          # details get if we detect that everything is not in place
+
           db.match_states.save saved_match.current_state, (err,saved_state) ->
-            | err? => res.status(400).send err
-            | otherwise => res.status(200).send do
-              status: 'OK'
-              match_key: player.match_key
+            | err? => res.status(500).send err
+            | otherwise => res.status(200).send { match_key: player.match_key }
+
 
 
 # Update the match with a move. The move is the index of the last state in the
@@ -204,45 +206,35 @@ app.post '/api/v1/matches/:match_id/moves', (req, res) ->
   move  = req.body
 
   db.matches.findOne { match_id: match_id }, (err, amatch) ->
-    | err? => res.status(400).send err
-    | !amatch? => res.status(200).send do
-      status: 'ERROR'
-      message: 'Match not found'
+    | err? => res.status(500).send err
+    | !amatch? => res.status(404).send { message: "Match [#{match_id}] not found" }
     | amatch.status != 'inprogress' => res.status(400).send { message: "Match [#{match_id}] not in progress" }
     | otherwise =>
       role = amatch.role_map[match_key]
-      switch role
-      | !role? => res.status(200).send do
-        status: 'ERROR'
-        message: 'match_key not valid for this match'
-      | amatch.submitted_moves[role]? => res.status(200).send do
-          status: 'ERROR'
-          message: 'move already submitted'
+      switch
+      | !role? => res.status(400).send  { message: "Match [#{match_id}] does not accept match_key [#{match_key}]" }
+      | amatch.submitted_moves[role]? => res.status(400).send { message : "Move already submitted for mathd_key [#{match_key}] on match [#{match_id}]" }
       | otherwise =>
         db.matches.findAndModify { match_id: match_id , 'current_state.state_number':move.state_number, '$where':'this.submitted_moves_count<this.player_count'  }
         ,[]
         ,{ '$set' : { "submitted_moves.#{role}":move.move_index }, '$inc':{submitted_moves_count:1} }
         , {new:true}, (err,saved_match) ->
-          | !saved_match? => res.status(200).send do
-            status: 'ERROR'
-            message: 'invalid state_number'
+          | err? => res.status(500).send err
+          | !saved_match? => res.status(400).send { message : "Invalid state number [#{move.state_number}] for match_id [#{match_id}]" }
           | otherwise =>
             if saved_match.submitted_moves_count == saved_match.player_count
 
               saved_match.current_state = games[saved_match.game_id].module.next_game_state saved_match.current_state,saved_match.submitted_moves
               saved_match.submitted_moves_count = 0
+              saved_match.submitted_moves = {}
               if saved_match.current_state.finished
                 saved_match.status = 'done'
 
               db.matches.save saved_match, (err,write_status) ->
-                | err? => res.status(400).send err
+                | err? => res.status(500).send err
                 | otherwise =>
                   db.match_states.save saved_match.current_state, (err,saved_state) ->
-                    | err? => res.status(400).send err
-                    | otherwise => res.status(200).send do
-                      status: 'OK'
-                      match: saved_match
+                    | err? => res.status(500).send err
+                    | otherwise => res.status(200).send saved_match
             else
-              res.status(200).send do
-                status: 'OK'
-                match: saved_match
+              res.status(200).send saved_match
