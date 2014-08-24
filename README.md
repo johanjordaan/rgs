@@ -14,6 +14,12 @@ Error codes
 404 Not Found
 500 Fatal error
 
+Game states
+====================
+waiting - The game has been started and is currently waiting for players to join
+inprogress - The game is in progress
+done - The game is done
+
 
 # game developers
 =====================

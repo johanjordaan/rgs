@@ -97,7 +97,7 @@ app.post '/api/v1/matches', (req, res) ->
       new_match =
         match_id: utils.generate_token {}
         game_id: options.game_id
-        status: "open"
+        status: "waiting"
         required_players: options.required_players
         player_count : 0
         players: []
@@ -116,6 +116,7 @@ app.post '/api/v1/matches', (req, res) ->
 #
 app.get '/api/v1/matches/:match_id', (req, res) ->
   match_id = req.param 'match_id'
+  match_key = req.param 'match_key'
 
   #todo : players and other stuff like moves etc needs to be sanaitised
   # this is to prevent private game data from being leaked
@@ -126,21 +127,6 @@ app.get '/api/v1/matches/:match_id', (req, res) ->
       switch
       | !amatch? => res.status(404).send { message:"Cannot find match [#{match_id}]" }
       | otherwise => res.status(200).send amatch
-
-
-# Get the states in the match
-# Inside the game the concept of a game might exist but it is not nescesary corelated turj in this
-# context
-# Request parameter filters : current_turn=true
-#app.get '/api/v1/matches/:match_id/states', (req, res) ->
-#  game_id = req.param 'game_id'
-#  match_id = req.param 'match_id'
-#  match_key = req.param 'match_key'
-#
-#  db.match_states.find({ match_id: match_id }).sort({state_number:1}).toArray (err, match_states) ->
-#    | err? => res.status(400).send err
-#    | otherwise => res.status(200).send match_states
-
 
 # Add a player to the match (join the match)
 # User has to post a structure with { player_key: player_name }
@@ -153,7 +139,7 @@ app.post '/api/v1/matches/:match_id/players', (req, res) ->
   player.match_key = utils.generate_token {}
   db.matches.findAndModify { match_id: match_id , '$where':'this.player_count<this.required_players' }
   ,[]
-  ,{ '$push' : { players:player }, '$inc' : { player_count:1} /*,'$set':{'status':'open'}*/  }
+  ,{ '$push' : { players:player }, '$inc' : { player_count:1 } }
   , {new:true}
   , (err,saved_match) ->
     | err? => res.status(500).send err

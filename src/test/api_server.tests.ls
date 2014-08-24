@@ -40,7 +40,6 @@ submit_move = (agent,match_id,match_key,state_number,move_index,cb) ->
   .send do
     state_number: state_number
     move_index: move_index
-  .expect 200
   .end (err,res) ->
     cb err,res.status,res.body
 
@@ -82,7 +81,7 @@ describe 'api server : ', (done) ->
     it 'should create a new match', (done) ->
       create_match agent,'ttt', (err,status,res) ->
         status.should.equal 200
-        res.status.should.equal "open"
+        res.status.should.equal "waiting"
         match_id := res.match_id
         done!
 
@@ -106,7 +105,7 @@ describe 'api server : ', (done) ->
         done!
 
     it 'should return a list of matches that match the game_id and a status', (done) ->
-      list_matches agent,'ttt','waiting', (err,status,res) ->
+      list_matches agent,'ttt','inprogress', (err,status,res) ->
         status.should.equal 200
         res.length.should.equal 0
         done!
@@ -115,7 +114,7 @@ describe 'api server : ', (done) ->
     it 'should return the details of the match', (done) ->
       get_match_details agent,match_id,null, (err,status,res) ->
         status.should.equal 200
-        res.status.should.equal 'open'
+        res.status.should.equal 'waiting'
         done!
 
     it 'should return an empty match if the match_id does not exist', (done) ->
