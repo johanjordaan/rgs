@@ -1,0 +1,35 @@
+<div>
+  <h2>Tic-Tac-Toe</h2>
+
+  Name : <input type="text" placeholder="player name" ng-model="player.name" ng-disabled="isBusy()"></input>
+  <div ng-show="isBusy()">
+    State : {{ status }} <br>
+    Match ID : {{ match_id }} <br>
+    Match Key : {{ player.match_key }}
+  </div>
+  <button ng-click="play()" ng-hide="isBusy()">Play</button>
+
+  <button ng-click="concede()" ng-show="isBusy()">Concede</button>
+
+
+
+  <!--h3>{{status}}[{{match_id}}]</h3>
+  <button ng-click="start()">Start</button>
+  <button ng-click="abort()">Abort</button>
+  <div>
+    <select ng-model="playerA.selected_move" ng-options="move.description for move in playerA.moves">
+    </select>
+    Player A ({{playerA.name}}) is {{playerA.role}}: {{playerA.match_key}}</br>
+    <select ng-model="playerB.selected_move" ng-options="move.description for move in playerB.moves">
+    </select>
+    Player B ({{playerB.name}}) is {{playerB.role}}: {{playerB.match_key}}</br>
+  </div>
+  <button ng-click="submit()">Submit</button>
+  <table>
+    <tr ng-repeat="row in board track by $index">
+      <td ng-repeat="col in row track by $index">
+        {{col}}
+      </td>
+    </tr>
+  </table-->
+</div>

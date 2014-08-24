@@ -20,19 +20,19 @@ gameController = ($scope,Match,Player,Move,ErrorHandler) ->
   $scope.start = ->
     $scope.status = "In progress..."
 
-    Match.create {game_id:'ttt'},(res) ->
-      $scope.match_id = res.match.match_id
-      Player.save {match_id:$scope.match_id},$scope.playerA ,(res)->
-        $scope.playerA.match_key = res.match_key
-        Player.save {match_id:$scope.match_id},$scope.playerB ,(res)->
-          $scope.playerB.match_key = res.match_key
-          Match.get {match_id:$scope.match_id},(res) ->
-            $scope.state_number = res.match.current_state.state_number
-            $scope.board = res.match.current_state._private.board
-            $scope.playerA.role = res.match.role_map[$scope.playerA.match_key]
-            $scope.playerB.role = res.match.role_map[$scope.playerB.match_key]
-            $scope.playerA.moves = res.match.current_state.valid_moves[$scope.playerA.role]
-            $scope.playerB.moves = res.match.current_state.valid_moves[$scope.playerB.role]
+    Match.create {game_id:'ttt'},(amatch) ->
+      $scope.match_id = amatch.match_id
+      Player.save {match_id:$scope.match_id},$scope.playerA ,(player)->
+        $scope.playerA.match_key = player.match_key
+        Player.save {match_id:$scope.match_id},$scope.playerB ,(player)->
+          $scope.playerB.match_key = player.match_key
+          Match.get {match_id:$scope.match_id},(amatch) ->
+            $scope.state_number = amatch.current_state.state_number
+            $scope.board = amatch.current_state._private.board
+            $scope.playerA.role = amatch.role_map[$scope.playerA.match_key]
+            $scope.playerB.role = amatch.role_map[$scope.playerB.match_key]
+            $scope.playerA.moves = amatch.current_state.valid_moves[$scope.playerA.role]
+            $scope.playerB.moves = amatch.current_state.valid_moves[$scope.playerB.role]
 
             $scope.playerA.selected_move = $scope.playerA.moves[0]
             $scope.playerB.selected_move = $scope.playerB.moves[0]
@@ -44,23 +44,47 @@ gameController = ($scope,Match,Player,Move,ErrorHandler) ->
 
   $scope.submit = ->
     Move.submit {match_id:$scope.match_id,match_key:$scope.playerA.match_key}
-    ,{state_number:$scope.state_number,move_index:$scope.playerA.selected_move.id},(res) ->
+    ,{state_number:$scope.state_number,move_index:$scope.playerA.selected_move.id},(amatch) ->
       Move.submit {match_id:$scope.match_id,match_key:$scope.playerB.match_key}
-      ,{state_number:$scope.state_number,move_index:$scope.playerB.selected_move.id},(res) ->
+      ,{state_number:$scope.state_number,move_index:$scope.playerB.selected_move.id},(amatch) ->
 
-          if res.match.current_state.finished
+          if amatch.current_state.finished
             $scope.status = "Finshed ..."
 
-          $scope.board = res.match.current_state._private.board
-          $scope.state_number = res.match.current_state.state_number
-          $scope.playerA.moves = res.match.current_state.valid_moves[$scope.playerA.role]
-          $scope.playerB.moves = res.match.current_state.valid_moves[$scope.playerB.role]
+          $scope.board = amatch.current_state._private.board
+          $scope.state_number = amatch.current_state.state_number
+          $scope.playerA.moves = amatch.current_state.valid_moves[$scope.playerA.role]
+          $scope.playerB.moves = amatch.current_state.valid_moves[$scope.playerB.role]
 
           $scope.playerA.selected_move = $scope.playerA.moves[0]
           $scope.playerB.selected_move = $scope.playerB.moves[0]
       ,ErrorHandler
     ,ErrorHandler
 
+
+apiFactory = ($resource,ErrorHandler) ->
+  do
+    findMatches: (params, cb) ->
+      $resource '/api/v1/matches', null
+      .query params, cb, ErrorHandler
+
+
+    startMatch: (params, cb) ->
+      $resource '/api/v1/matches/:match_id', null
+      .save params, cb, ErrorHandler
+
+
+    joinMatch: (params, player, cb) ->
+      $resource '/api/v1/matches/:match_id/players', null
+      .save params, player, cb, ErrorHandler
+
+    getMatchState: (params, cb) ->
+      $resource '/api/v1/matches/:match_id', null
+      .get params, cb, ErrorHandler
+
+    makeMove: (params, move, cb) ->
+      $resource 'api/v1/matches/:match_id/moves', null
+      .save params, move, cb, ErrorHandler
 
 
 matchFactory = ($resource) ->
@@ -81,16 +105,40 @@ moveFactory = ($resource) ->
       method : 'POST'
 
 
-errorHandlerFactory = (Errors)->
+errorHandlerFactory = (Errors) ->
   (err) ->
+    console.log err
     Errors.push err.data.message
 
 
-app = angular.module 'gameApp',['ngResource']
+config = ($routeProvider) ->
+  $routeProvider
+  .when '/', do
+    templateUrl: 'ttt.html'
+    controller: 'tttController'
+
+  .when '/exp', do
+    templateUrl: 'ttt_experimental.html'
+    controller: gameController
+  .otherwise do
+    redirectTo: '/'
+
+
+
+app = angular.module 'gameApp',['ngResource','ngRoute']
 app.controller 'gameController', ['$scope','Match','Player','Move','ErrorHandler',gameController]
+
+app.controller 'tttController', tttControllerSpec
+
 app.controller 'errorController', ['$scope','Errors',errorController]
+
+app.factory 'Api',['$resource','ErrorHandler',apiFactory]
+
 app.factory 'Match',['$resource',matchFactory]
 app.factory 'Player',['$resource',playerFactory]
 app.factory 'Move',['$resource',moveFactory]
 app.factory 'ErrorHandler',['Errors',errorHandlerFactory]
 app.value 'Errors',[]
+
+
+app.config ['$routeProvider',config]

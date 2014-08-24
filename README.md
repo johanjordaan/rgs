@@ -21,12 +21,19 @@ inprogress - The game is in progress
 done - The game is done
 
 
-# game developers
+Bot developers
+====================
+
+
+
+game developers
 =====================
 Your game needs to provide two methods
 
 initial_game_state : options -> game_state
 next_game_state : game_state * moves -> game_state
+
+TODO: ranking: game_state.results * [player.rank] -> [player:new_rank]  
 
 options is a dictionary of values that you can use to construct your game state
 game state is a dictionary of values
