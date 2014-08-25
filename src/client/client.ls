@@ -82,9 +82,12 @@ apiFactory = ($resource,ErrorHandler) ->
       $resource '/api/v1/matches/:match_id', null
       .get params, cb, ErrorHandler
 
-    makeMove: (params, move, cb) ->
-      $resource 'api/v1/matches/:match_id/moves', null
-      .save params, move, cb, ErrorHandler
+    makeMove: (params, move) ->
+      new Promise (resolve,reject) ->
+        $resource 'api/v1/matches/:match_id/moves', null
+        .save params, move, resolve, (err)->
+          ErrorHandler err
+          reject err
 
 
 matchFactory = ($resource) ->
