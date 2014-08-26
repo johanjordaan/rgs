@@ -87,6 +87,7 @@ module.exports = (grunt) ->
            'angular/angular.js': 'angular/angular.js'
            'angular/angular-route.js': 'angular-route/angular-route.js'
            'angular/angular-resource.js': 'angular-resource/angular-resource.js'
+           'prelude-browser.js': 'prelude-ls/browser/prelude-browser.js'
 
     forever:
       adminServer:

@@ -14,11 +14,9 @@
   <button ng-click="concede()" ng-show="isBusy()">Concede</button>
   <table class="tttTable">
     <tr ng-repeat="row in board track by $index">
-      <td ng-repeat="cell in row track by $index">
+      <td ng-repeat="cell in row track by $index" ng-click="submit(cell.move_index)">
         {{ cell.icon }}
       </td>
     </tr>
   </table>
-  <select ng-model="selected_move" ng-options="move.description for move in moves"></select>
-  <button ng-click="submit()" ng-show="isBusy()">Submit</button>
 </div>

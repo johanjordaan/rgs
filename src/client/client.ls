@@ -127,7 +127,6 @@ config = ($routeProvider) ->
     redirectTo: '/'
 
 
-
 app = angular.module 'gameApp',['ngResource','ngRoute']
 app.controller 'gameController', ['$scope','Match','Player','Move','ErrorHandler',gameController]
 

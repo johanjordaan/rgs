@@ -20,16 +20,16 @@ tttController = ($scope,$timeout,Api) ->
     $scope.moves = amatch.current_state.valid_moves[$scope.role]
 
     new_board = amatch.current_state._private.board
+    moves = amatch.current_state.valid_moves[$scope.role]
     for row to 2
       for col to 2
         cell = $scope.board[row][col]
         switch new_board[row][col]
-        | 0 => cell.icon = ''
+        | 0 =>
+          cell.icon = ''
+          cell.move_index = moves |> _.find-index (move) ->
+            move.row == row and move.col == col
         | otherwise => cell.icon = new_board[row][col]
-
-    #$scope.board = amatch.current_state._private.board
-
-    $scope.selected_move = $scope.moves[0]
 
   pollServer = ->
     Api.getMatchState { match_id:$scope.match_id }, (amatch) ->
@@ -37,7 +37,8 @@ tttController = ($scope,$timeout,Api) ->
       | amatch.current_state.state_number > $scope.state_number =>
         updateBoard amatch
         if $scope.moves.length  == 1
-          submitMove $scope.selected_move.id
+          # TODO : there should be a NOP move in all games.... that can be done automatically
+          submitMove $scope.moves[0].id
           $scope.message = "Waiting for other players to move..."
         else
           $scope.message = "Submit your move"
@@ -56,8 +57,10 @@ tttController = ($scope,$timeout,Api) ->
     .catch (err) ->
       pollServer!
 
-  $scope.submit = ->
-    submitMove $scope.selected_move.id
+  $scope.submit = (move_index) ->
+    switch move_index
+    | -1 =>
+    | otherwise => submitMove move_index
 
   $scope.play = ->
     Api.findMatches { game_id:'ttt', status:"waiting"},(matches) ->
@@ -100,9 +103,10 @@ tttController = ($scope,$timeout,Api) ->
       for col to 2
         $scope.board[row].push do
           icon: ''
+          move_index: -1
 
 
   startUp!
 
-
+_  = require 'prelude-ls'
 this.tttControllerSpec = ['$scope','$timeout','Api',tttController]
