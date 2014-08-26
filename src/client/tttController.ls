@@ -3,17 +3,6 @@ tttController = ($scope,$timeout,Api) ->
   $scope.isBusy = ->
     $scope.busy
 
-  isMatchReady = ->
-    $scope.message = "Waiting for players..."
-    Api.getMatchState { match_id:$scope.match_id }, (amatch) ->
-      switch amatch.status
-      | "inprogress" =>
-        $scope.status = amatch.status
-        pollServer!
-      | otherwise =>
-        $scope.status = amatch.status
-        $timeout isMatchReady,1000
-
   updateBoard = (amatch) ->
     $scope.state_number = amatch.current_state.state_number
     $scope.role = amatch.role_map[$scope.player.match_key]
@@ -33,18 +22,31 @@ tttController = ($scope,$timeout,Api) ->
 
   pollServer = ->
     Api.getMatchState { match_id:$scope.match_id }, (amatch) ->
-      switch
-      | amatch.current_state.state_number > $scope.state_number =>
-        updateBoard amatch
-        if $scope.moves.length  == 1
-          # TODO : there should be a NOP move in all games.... that can be done automatically
-          submitMove $scope.moves[0].id
-          $scope.message = "Waiting for other players to move..."
-        else
-          $scope.message = "Submit your move"
-      | otherwise =>
+      $scope.status = amatch.status
+      switch $scope.status
+      | "waiting" =>
+        $scope.message = "Waiting for players to join ..."
         $timeout pollServer,1000
-
+      | "inprogress" =>
+        switch
+        | amatch.current_state.state_number > $scope.state_number =>
+          updateBoard amatch
+          if $scope.moves.length  == 1
+            # TODO : there should be a NOP move in all games.... that can be done automatically
+            submitMove $scope.moves[0].id
+            $scope.message = "Waiting for other players to move..."
+          else
+            $scope.message = "Submit your move"
+        | otherwise =>
+          $scope.message = "Waiting for other players to move..."
+          $timeout pollServer,1000
+      | otherwise =>
+        updateBoard amatch
+        switch amatch.current_state.results[$scope.role]
+        | 3 => $scope.message = "Done ... You won!"
+        | 1 => $scope.message = "Done ... It was a draw"
+        | otherwise => $scope.message = "Done ... You lost :("
+        #$scope.busy = false
 
   submitMove = (move_index)->
     move =
@@ -73,7 +75,7 @@ tttController = ($scope,$timeout,Api) ->
             $scope.player.match_key = player_data.match_key
             $scope.busy = true
 
-            isMatchReady!
+            pollServer!
 
       | otherwise =>
         Api.joinMatch { match_id:matches[0].match_id} ,$scope.player, (player_data) ->
