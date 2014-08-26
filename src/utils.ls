@@ -1,6 +1,11 @@
 _ = require 'prelude-ls'
 crypto = require 'crypto'
 
+/**
+ * @description utils module
+ *
+**/
+
 generate_token = (data) ->
   nonse = new Buffer( [1 to 256] |> _.map (item) -> Math.floor 256*Math.random() )
   hash = crypto.createHash 'sha256'
@@ -19,6 +24,24 @@ shuffle = (source) ->
     # Return the shuffled array.
     result
 
+
+/**
+ * @ngdoc function
+ * @name utils.random_pick
+ * @param {array} source The array from which to pick a random element.
+ * @function
+ *
+ * @description
+ * Picks a random element from the supplied array.
+ *
+ * @example
+   <example module="rfx">
+     <file name="index.html">
+         <textarea ng-model="text" r-autogrow class="input-block-level"></textarea>
+         <pre>{{text}}</pre>
+     </file>
+   </example>
+ */
 random_pick = (source) ->
   shuffled_list = source |> shuffle
   return shuffled_list[0]

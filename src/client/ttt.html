@@ -1,3 +1,4 @@
+<link rel="stylesheet" href="ttt.css">
 <div>
   <h2>Tic-Tac-Toe</h2>
 
@@ -11,15 +12,13 @@
   </div>
   <button ng-click="play()" ng-hide="isBusy()">Play</button>
   <button ng-click="concede()" ng-show="isBusy()">Concede</button>
-  <table>
+  <table class="tttTable">
     <tr ng-repeat="row in board track by $index">
-      <td ng-repeat="col in row track by $index">
-        {{col}}
+      <td ng-repeat="cell in row track by $index">
+        {{ cell.icon }}
       </td>
     </tr>
   </table>
   <select ng-model="selected_move" ng-options="move.description for move in moves"></select>
   <button ng-click="submit()" ng-show="isBusy()">Submit</button>
-
-
 </div>

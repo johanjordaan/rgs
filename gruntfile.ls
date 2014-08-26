@@ -28,7 +28,8 @@ module.exports = (grunt) ->
         files:
            'src/client/*.ls'
            'src/client/*.html'
-        tasks: ['deadscript' 'copy:frontEndStatic' 'mochaTest:test']
+           'src/client/*.less'
+        tasks: ['deadscript' 'copy:frontEndStatic' 'less:all' 'mochaTest:test']
       testChanges:
         files:
            'src/test/*.ls'
@@ -86,7 +87,6 @@ module.exports = (grunt) ->
            'angular/angular.js': 'angular/angular.js'
            'angular/angular-route.js': 'angular-route/angular-route.js'
            'angular/angular-resource.js': 'angular-resource/angular-resource.js'
-           'q.js': 'q/q.js'
 
     forever:
       adminServer:
@@ -125,6 +125,20 @@ module.exports = (grunt) ->
         dir: './coverage/reports',
         print: 'detail'
 
+    ngdocs:
+      src: ['./dist/utils.js']
+
+
+    less:
+      all:
+        files: [
+          expand: true
+          cwd:'src/'
+          src: ['**/*.less']
+          dest: './dist/'
+          ext:'.css'
+        ]
+
 
   grunt.loadNpmTasks 'grunt-contrib-uglify'
   grunt.loadNpmTasks 'grunt-contrib-watch'
@@ -136,13 +150,17 @@ module.exports = (grunt) ->
   grunt.loadNpmTasks 'grunt-mocha-test'
   grunt.loadNpmTasks 'grunt-deadscript'
   grunt.loadNpmTasks 'grunt-istanbul'
+  grunt.loadNpmTasks 'grunt-ngdocs'
+  grunt.loadNpmTasks 'grunt-contrib-less'
 
 
   grunt.registerTask 'devmon',  ['concurrent:apiAndAdmin']
   grunt.registerTask 'apimon',  ['concurrent:api']
   grunt.registerTask 'adminmon',['concurrent:admin']
   grunt.registerTask 'test',    ['concurrent:tests']
-  grunt.registerTask 'default', ['deadscript' 'copy:frontEndStatic' 'bowercopy']
+  grunt.registerTask 'default', ['deadscript' 'less:all' 'copy:frontEndStatic' 'bowercopy']
+  grunt.registerTask 'docs', ['deadscript' 'ngdocs']
+
 
 
   grunt.registerTask 'coverage', ['deadscript','instrument', 'mochaTest:coverage',

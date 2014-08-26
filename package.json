@@ -25,7 +25,9 @@
     "q": "~1.0.1",
     "grunt-deadscript": "0.0.1",
     "async": "~0.9.0",
-    "grunt-istanbul": "~0.3.0"
+    "grunt-istanbul": "~0.3.0",
+    "grunt-ngdocs": "~0.2.3",
+    "grunt-contrib-less": "~0.11.4"
   },
   "dependencies": {
     "lcg-rnd": "*"

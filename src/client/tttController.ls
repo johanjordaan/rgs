@@ -16,9 +16,19 @@ tttController = ($scope,$timeout,Api) ->
 
   updateBoard = (amatch) ->
     $scope.state_number = amatch.current_state.state_number
-    $scope.board = amatch.current_state._private.board
     $scope.role = amatch.role_map[$scope.player.match_key]
     $scope.moves = amatch.current_state.valid_moves[$scope.role]
+
+    new_board = amatch.current_state._private.board
+    for row to 2
+      for col to 2
+        cell = $scope.board[row][col]
+        switch new_board[row][col]
+        | 0 => cell.icon = ''
+        | otherwise => cell.icon = new_board[row][col]
+
+    #$scope.board = amatch.current_state._private.board
+
     $scope.selected_move = $scope.moves[0]
 
   pollServer = ->
@@ -50,9 +60,6 @@ tttController = ($scope,$timeout,Api) ->
     submitMove $scope.selected_move.id
 
   $scope.play = ->
-    # 1) Look for a game to join
-    # 2) If ther is one then join it
-    # 3) else create one and join it
     Api.findMatches { game_id:'ttt', status:"waiting"},(matches) ->
       switch matches.length
       | 0 =>
@@ -73,10 +80,7 @@ tttController = ($scope,$timeout,Api) ->
           $scope.busy = true
 
           pollServer!
-          #Api.getMatchState { match_id:$scope.match_id }, (amatch) ->
-          #  $scope.status = amatch.status
-          #
-          #  Api.makeMove { match_id:$scope.match_id }, {}, (amatch) ->
+
 
   $scope.concede = ->
     $scope.busy = false
@@ -90,6 +94,13 @@ tttController = ($scope,$timeout,Api) ->
     $scope.status: ''
     $scope.message = ''
     $scope.state_number = -1
+    $scope.board = []
+    for row to 2
+      $scope.board.push []
+      for col to 2
+        $scope.board[row].push do
+          icon: ''
+
 
   startUp!
 
