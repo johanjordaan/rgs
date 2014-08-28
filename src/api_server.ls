@@ -13,6 +13,7 @@ app.use bodyParser.json()
 console.log __dirname + '/'
 app.use '/',express.static(__dirname + '/client')
 
+
 server = (require 'http').createServer app
 
 LISTEN_PORT = 4000

@@ -22,12 +22,12 @@
     "mongoskin": "~1.4.4",
     "chai": "*",
     "supertest": "~0.13.0",
-    "q": "~1.0.1",
     "grunt-deadscript": "0.0.1",
     "async": "~0.9.0",
     "grunt-istanbul": "~0.3.0",
-    "grunt-ngdocs": "~0.2.3",
-    "grunt-contrib-less": "~0.11.4"
+    "grunt-contrib-less": "~0.11.4",
+    "grunt-jsdoc": "~0.5.7",
+    "ink-docstrap": "~0.4.12"
   },
   "dependencies": {
     "lcg-rnd": "*"

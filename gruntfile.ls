@@ -126,10 +126,6 @@ module.exports = (grunt) ->
         dir: './coverage/reports',
         print: 'detail'
 
-    ngdocs:
-      src: ['./dist/utils.js']
-
-
     less:
       all:
         files: [
@@ -140,6 +136,13 @@ module.exports = (grunt) ->
           ext:'.css'
         ]
 
+    jsdoc:
+      docstrap:
+        src: ['./dist/utils.js'] #, './README.md']
+        options:
+          destination : './dist/client/doc/'
+          template : "node_modules/ink-docstrap/template"
+          configure : "node_modules/ink-docstrap/template/jsdoc.conf.json"
 
   grunt.loadNpmTasks 'grunt-contrib-uglify'
   grunt.loadNpmTasks 'grunt-contrib-watch'
@@ -151,8 +154,8 @@ module.exports = (grunt) ->
   grunt.loadNpmTasks 'grunt-mocha-test'
   grunt.loadNpmTasks 'grunt-deadscript'
   grunt.loadNpmTasks 'grunt-istanbul'
-  grunt.loadNpmTasks 'grunt-ngdocs'
   grunt.loadNpmTasks 'grunt-contrib-less'
+  grunt.loadNpmTasks 'grunt-jsdoc'
 
 
   grunt.registerTask 'devmon',  ['concurrent:apiAndAdmin']
@@ -160,7 +163,8 @@ module.exports = (grunt) ->
   grunt.registerTask 'adminmon',['concurrent:admin']
   grunt.registerTask 'test',    ['concurrent:tests']
   grunt.registerTask 'default', ['deadscript' 'less:all' 'copy:frontEndStatic' 'bowercopy']
-  grunt.registerTask 'docs', ['deadscript' 'ngdocs']
+
+  grunt.registerTask 'docs', ['deadscript' 'jsdoc']
 
 
 

@@ -26,21 +26,10 @@ shuffle = (source) ->
 
 
 /**
- * @ngdoc function
- * @name utils.random_pick
- * @param {array} source The array from which to pick a random element.
- * @function
- *
- * @description
- * Picks a random element from the supplied array.
- *
- * @example
-   <example module="rfx">
-     <file name="index.html">
-         <textarea ng-model="text" r-autogrow class="input-block-level"></textarea>
-         <pre>{{text}}</pre>
-     </file>
-   </example>
+ * Represents a book.
+ * @constructor
+ * @param {string} title - The title of the book.
+ * @param {string} author - The author of the book.
  */
 random_pick = (source) ->
   shuffled_list = source |> shuffle
