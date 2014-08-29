@@ -65,14 +65,20 @@ calculate_results = (game_state) ->
   board = game_state._private.board
   for i to 2
     if board[i][0] == board[i][1] == board[i][2]
-      winner = board[i][0]
+      if board[i][0] != 0
+        winner = board[i][0]
     if board[0][i] == board[1][i] == board[2][i]
-      winner = board[0][i]
+      if board[0][i] != 0
+        winner = board[0][i]
 
   if board[0][0] == board[1][1] == board[2][2]
-    winner = board[0][0]
+    if board[0][0] != 0
+      winner = board[0][0]
   if board[0][2] == board[1][1] == board[2][0]
-    winner = board[0][2]
+    if board[0][2] != 0
+      winner = board[0][2]
+
+
 
   switch winner
   | 0 =>
