@@ -24,6 +24,7 @@ db_name = "mongodb://localhost/rgs"
 db = mongo.db db_name, {native_parser:true}
 db.bind 'matches'
 db.bind 'match_states'
+db.bind 'sessions'
 
 
 /* istanbul ignore if */
@@ -37,6 +38,7 @@ else
       db := test_db
       db.bind 'matches'
       db.bind 'match_states'
+      db.bind 'sessions'
     app
 
 ######## Game registration
@@ -65,7 +67,7 @@ app.get '/api/v1/games', (req, res) ->
   res.status(200).send games_list
 
 # Get a list of matches
-# Request parameter filters : game_status
+# Request parameter filters : game_id,status
 #
 #
 app.get '/api/v1/matches', (req, res) ->
@@ -115,9 +117,18 @@ app.post '/api/v1/matches', (req, res) ->
 # Request parameter : match_key - if not presented then only public data is returned,
 # these restrictions only hold if a game is in progress. Afterwards
 #
+# This doubles as the keep alive by updating the sessions table
+#
 app.get '/api/v1/matches/:match_id', (req, res) ->
   match_id = req.param 'match_id'
   match_key = req.param 'match_key'
+
+  # Touch the sessions queue
+  #
+  db.sessions.update { match_id:match_id, match_key:match_key }
+  ,{ '$set': { last_seen:new Date() } }
+  ,(err,writeResult) ->
+
 
   #todo : players and other stuff like moves etc needs to be sanaitised
   # this is to prevent private game data from being leaked
@@ -146,6 +157,11 @@ app.post '/api/v1/matches/:match_id/players', (req, res) ->
     | err? => res.status(500).send err
     | !saved_match? => res.status(400).send { message : "Match [#{match_id}] is no longer accepting players" }
     | saved_match.players.length < saved_match.required_players =>
+      # Insert the session variable
+      #
+      db.sessions.save { match_id:match_id, match_key:player.match_key, last_seen:new Date() }
+      ,(err,saved_session) ->
+
       # The match is still open but now with one less spot
       #
       res.status(200).send { match_key: player.match_key }
@@ -162,6 +178,12 @@ app.post '/api/v1/matches/:match_id/players', (req, res) ->
       db.matches.save saved_match, (err,write_status) ->
         | err? => res.status(500).send err
         | otherwise =>
+
+          # Insert the session variable
+          #
+          db.sessions.save { match_id:match_id, match_key:player.match_key, last_seen:new Date() }
+          ,(err,saved_session) ->
+
 
           # TODO : What do we do if we fail at this point? We cannot fix anything?
           # Should we maybbe first save this state or should we do this bootstrap on

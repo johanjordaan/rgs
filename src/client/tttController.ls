@@ -1,13 +1,10 @@
+var timer
 
 tttController = ($scope,$timeout,Api) ->
   $scope.isBusy = ->
     $scope.busy
 
   updateBoard = (amatch) ->
-    $scope.state_number = amatch.current_state.state_number
-    $scope.role = amatch.role_map[$scope.player.match_key]
-    $scope.moves = amatch.current_state.valid_moves[$scope.role]
-
     new_board = amatch.current_state._private.board
     moves = amatch.current_state.valid_moves[$scope.role]
     for row to 2
@@ -20,16 +17,29 @@ tttController = ($scope,$timeout,Api) ->
             move.row == row and move.col == col
         | otherwise => cell.icon = new_board[row][col]
 
+  setTimer = ->
+    clearTimer!
+    timer := $timeout pollServer,1000
+
+  clearTimer = ->
+    if timer?
+      $timeout.cancel timer
+
+
   pollServer = ->
-    Api.getMatchState { match_id:$scope.match_id }, (amatch) ->
+    Api.getMatchState { match_id:$scope.match_id,match_key:$scope.player.match_key }, (amatch) ->
       $scope.status = amatch.status
+      $scope.state_number = amatch.current_state?.state_number
+      $scope.role = amatch.role_map?[$scope.player.match_key]
+      $scope.moves = amatch.current_state.valid_moves?[$scope.role]
+
       switch $scope.status
       | "waiting" =>
         $scope.message = "Waiting for players to join ..."
-        $timeout pollServer,1000
+        setTimer!
       | "inprogress" =>
         switch
-        | amatch.current_state.state_number > $scope.state_number =>
+        | !amatch.submitted_moves?[$scope.role]? =>
           updateBoard amatch
           if $scope.moves.length  == 1
             # TODO : there should be a NOP move in all games.... that can be done automatically
@@ -37,21 +47,31 @@ tttController = ($scope,$timeout,Api) ->
             $scope.message = "Waiting for other players to move..."
           else
             $scope.message = "Submit your move"
+            # Let the server know we are alive?
+          setTimer!
         | otherwise =>
           $scope.message = "Waiting for other players to move..."
-          $timeout pollServer,1000
+          setTimer!
       | otherwise =>
         updateBoard amatch
         switch amatch.current_state.results[$scope.role]
         | 3 => $scope.message = "Done ... You won!"
         | 1 => $scope.message = "Done ... It was a draw"
         | otherwise => $scope.message = "Done ... You lost :("
-        #$scope.busy = false
+        clearTimer!
+
 
   submitMove = (move_index)->
     move =
       state_number: $scope.state_number
       move_index: move_index
+
+    if !$scope.moves[move_index].nop
+      row = $scope.moves[move_index].row
+      col = $scope.moves[move_index].col
+      $scope.board[row][col] = do
+        icon:$scope.role
+        move_index:-1
 
     Api.makeMove { match_id:$scope.match_id, match_key:$scope.player.match_key }, move
     .then (res) ->
