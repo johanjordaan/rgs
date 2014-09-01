@@ -1,5 +1,4 @@
 _ = require 'prelude-ls'
-Q = require 'q'
 express = require 'express'
 bodyParser = require 'body-parser'
 
@@ -8,11 +7,8 @@ utils = require './utils'
 app = express()
 
 # Configure express
-#app.use logging 'dev'
 app.use bodyParser.json()
-console.log __dirname + '/'
 app.use '/',express.static(__dirname + '/client')
-
 
 server = (require 'http').createServer app
 
@@ -24,7 +20,7 @@ db_name = "mongodb://localhost/rgs"
 db = mongo.db db_name, {native_parser:true}
 db.bind 'matches'
 db.bind 'match_states'
-db.bind 'sessions'
+db.bind 'match_requests'
 
 
 /* istanbul ignore if */
@@ -38,7 +34,7 @@ else
       db := test_db
       db.bind 'matches'
       db.bind 'match_states'
-      db.bind 'sessions'
+      db.bind 'match_requests'
     app
 
 ######## Game registration
@@ -60,6 +56,59 @@ games_list = games |> _.values |> _.map (game) -> { game_id: game.game_id, descr
 
 
 ######## Rest Interface
+
+# Create a new match request
+#
+app.post '/api/v1/match_requests', (req, res) ->
+  game_id = req.body.game_id
+  game_options = req.body.game_options
+  player = req.body.player
+
+  game = games[game_id]
+
+  switch game?
+    | false => res.status(400).send { message: "Game [#{game_id}] does not exist" }
+    | otherwise =>
+      new_match_request =
+        match_request_id: utils.generate_token {}
+        game_id: game_id
+        player: player
+        game_options: game_options
+        creation_date: new Date()   # Date the request was created
+        last_seen_date: new Date()  # Date the player checked in for this request
+        match_found: false
+        match_id: null
+        match_key: null
+
+      db.match_request.save new_match_request, (err,saved_match_request) ->
+        | err? => res.status(500).send err
+        | otherwise =>
+          res.status(200).send { match_request_id: saved_match_request.match_request_id }
+
+          now = new Date()
+          active_date = new Date((now.getSeconds()-30)*1000)
+          db.match_requests.findItems { last_seen_date : { $gt : active_date }   }, (err, match_requests) ->
+            
+
+
+
+# This retuns wheter a match was found or not and updates the request
+#
+app.get '/api/vi/match_requests/:match_request_id', (req, res) ->
+  match_id = req.param 'match_id'
+
+  db.match_requests.findAndModify { match_request_id: match_request_id }
+  , []
+  , { '$set' : { last_seen_date:new Date() } }
+  , { new:true }
+  , (err,saved_match_request) ->
+    | err? => res.status(500).send err
+    | otherwise => res.status(200).send do
+        match_found: saved_match_request.match_found
+        match_id: saved_match_request.match_id
+        match_key: saved_match_request.match_key
+
+
 
 # Get a list of games
 #
@@ -222,7 +271,7 @@ app.post '/api/v1/matches/:match_id/moves', (req, res) ->
       role = amatch.role_map[match_key]
       switch
       | !role? => res.status(400).send  { message: "Match [#{match_id}] does not accept match_key [#{match_key}]" }
-      | amatch.submitted_moves[role]? => res.status(400).send { message : "Move already submitted for mathd_key [#{match_key}] on match [#{match_id}]" }
+      | amatch.submitted_moves[role]? => res.status(400).send { message : "Move already submitted for match_key [#{match_key}] on match [#{match_id}]" }
       | otherwise =>
         db.matches.findAndModify { match_id: match_id , 'current_state.state_number':move.state_number, '$where':'this.submitted_moves_count<this.player_count'  }
         ,[]
