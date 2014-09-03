@@ -1,4 +1,6 @@
+async = require 'async'
 _ = require 'prelude-ls'
+
 express = require 'express'
 bodyParser = require 'body-parser'
 
@@ -44,7 +46,10 @@ games =
   ttt:
     * game_id: 'ttt'
       description: 'Tic-Tac-Toe'
-      options: {game_id:'ttt',required_players:2}
+      options:
+        min_players: 2
+        max_players: 2
+        choose_role: true
       module: ttt
   ttt_fast:
     * game_id: 'ttt_fast'
@@ -55,13 +60,105 @@ games =
 games_list = games |> _.values |> _.map (game) -> { game_id: game.game_id, description: game.description }
 
 
+########## Batchy stuff
+## Queueie stuff
+
+
+
+_build_player_list = (source,min,max,current,cb) ->
+  if source.length == 0
+    if current.length < min
+      cb("failure",null)
+    else
+      mark "create match",current, ->
+        mark "unmark all",current, ->
+          cb("created",current)
+  else
+    item = source.pop!
+    mark "busy",item, (success) ->
+      if success
+        current.push item
+        if current.length >= max
+          source := []   # on the next recursion stop
+
+      build_list source,min,max,current,cb
+
+_match_options = (source_options,dest_options) ->
+  true
+
+_find_matching_requests = (source,options,current,cb) ->
+  if source.length == 0
+    if current.length < options.min
+      cb null
+    else
+      cb current
+  else
+    item = source.pop!
+
+    switch _match_options options,item
+    | true =>
+      _mark_as_busy item.match_request_id, (success) ->
+        switch success
+        | false =>
+        | otherwise => current.push item
+
+        switch current.length >= options.max
+        | false =>
+        | otherwise => source = []
+
+        _find_matching_requests source,options,current
+    | otherwise =>
+      _find_matching_requests source,options,current
+
+
+_mark_as_not_busy = (match_request_ids,cb) ->
+  db.match_requests.update { match_request_id: { '$in': match_request_ids } , _busy: true }
+  , { '$set' : { _busy: false } }
+  , (err) ->
+    | err? => cb(false)
+    | otherwise => cb(true)
+
+# cb(locked/true or false)
+_mark_as_busy = (match_request_id,cb) ->
+  db.match_requests.findAndModify { match_request_id: match_request_id , _busy: false }
+  , []
+  , { '$set' : { _busy: true } }
+  , {new:true}
+  , (err,updated_match_request) ->
+    | err? => cb(false)
+    | !updated_match_request? => cb(false)
+    | otherwise => cb(true)
+
+find_matching_requests = (match_request) ->
+  _mark_as_busy match_request.match_request_id,(success) ->
+    | false =>
+    | otherwise =>
+      now = new Date()
+      active_date = new Date((now.getSeconds()-30)*1000)
+      db.match_requests.findItems do
+        last_seen_date: { '$gt': active_date }
+        match_request_id: { '$ne': match_request.match_request.id }
+        game_details:
+          game_id: match_request.game_details.game_id
+        _busy: false
+      , (err, match_requests) ->
+        _find_matching_requests match_requests,match_request.game_options,[match_request], (matching_requests)->
+          | null => # Cannot create a match yet
+          | otherwise =>
+            # Create a match using the players and the options
+
+
+################################
+
+
 ######## Rest Interface
+app.post '/api/v1/'
 
 # Create a new match request
 #
 app.post '/api/v1/match_requests', (req, res) ->
   game_id = req.body.game_id
-  game_options = req.body.game_options
+  options = req.body.options
   player = req.body.player
 
   game = games[game_id]
@@ -71,31 +168,29 @@ app.post '/api/v1/match_requests', (req, res) ->
     | otherwise =>
       new_match_request =
         match_request_id: utils.generate_token {}
-        game_id: game_id
         player: player
-        game_options: game_options
-        creation_date: new Date()   # Date the request was created
+        game_id: game_id
+        options: options
+        creation_date: new Date()   # Date the request was created - not needed?
         last_seen_date: new Date()  # Date the player checked in for this request
         match_found: false
         match_id: null
         match_key: null
+        busy: false                 # Used for locking purposes
+
 
       db.match_request.save new_match_request, (err,saved_match_request) ->
         | err? => res.status(500).send err
         | otherwise =>
           res.status(200).send { match_request_id: saved_match_request.match_request_id }
 
-          now = new Date()
-          active_date = new Date((now.getSeconds()-30)*1000)
-          db.match_requests.findItems { last_seen_date : { $gt : active_date }   }, (err, match_requests) ->
-            
-
+          make_match saved_match_request
 
 
 # This retuns wheter a match was found or not and updates the request
 #
-app.get '/api/vi/match_requests/:match_request_id', (req, res) ->
-  match_id = req.param 'match_id'
+app.get '/api/v1/match_requests/:match_request_id', (req, res) ->
+  match_request_id = req.param 'match_request_id'
 
   db.match_requests.findAndModify { match_request_id: match_request_id }
   , []
@@ -108,6 +203,18 @@ app.get '/api/vi/match_requests/:match_request_id', (req, res) ->
         match_id: saved_match_request.match_id
         match_key: saved_match_request.match_key
 
+app.delete '/api/v1/match_requests/:match_request_id', (req, res) ->
+  match_request_id = req.param 'match_request_id'
+
+  db.match_requests.findOne { match_request_id: match_request_id, busy:false } (err,match_request) ->
+    | err? => res.status(500).send err
+    | !match_request? => res.status(400).send { message : "Cannot remove this request at this stage" }
+    | otherwise =>
+      db.match_requests.remove { match_request_id: match_request_id, busy:false }, (err) ->
+        | err? => res.status(500).send err
+        | otherwise => res.status(200).send {}
+
+        find_matching_requests match_request
 
 
 # Get a list of games
